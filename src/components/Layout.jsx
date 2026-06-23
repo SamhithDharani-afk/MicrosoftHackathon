@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, MessageSquarePlus, BarChart3, Sparkles } from 'lucide-react';
+import { LayoutDashboard, MessageSquarePlus, BarChart3, Sparkles, GitBranch } from 'lucide-react';
 
 export default function Layout() {
   const location = useLocation();
@@ -7,7 +7,8 @@ export default function Layout() {
   const navItems = [
     { path: '/', label: 'Home', icon: Sparkles },
     { path: '/submit', label: 'Submit Feedback', icon: MessageSquarePlus },
-    { path: '/dashboard', label: 'Manager Dashboard', icon: BarChart3 },
+    { path: '/dashboard', label: 'Dashboard', icon: BarChart3 },
+    { path: '/connect', label: 'Connect Repo', icon: GitBranch },
   ];
 
   return (

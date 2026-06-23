@@ -6,6 +6,7 @@ import ManagerDashboard from './pages/ManagerDashboard';
 import PainPointDetail from './pages/PainPointDetail';
 import WireframeView from './pages/WireframeView';
 import ProcessFlowView from './pages/ProcessFlowView';
+import ConnectRepo from './pages/ConnectRepo';
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="pain-point/:id" element={<PainPointDetail />} />
         <Route path="wireframe/:id" element={<WireframeView />} />
         <Route path="process-flow/:id" element={<ProcessFlowView />} />
+        <Route path="connect" element={<ConnectRepo />} />
       </Route>
     </Routes>
   );

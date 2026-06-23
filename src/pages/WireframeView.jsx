@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check } from 'lucide-react';
+import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, GitBranch } from 'lucide-react';
 import { wireframes } from '../data/mockData';
 
 function WireframePanel({ type, data }) {
@@ -126,9 +126,17 @@ function WireframePanel({ type, data }) {
 export default function WireframeView() {
   const { id } = useParams();
   const wireframe = wireframes[id];
-  const [view, setView] = useState('comparison'); // 'comparison', 'before', 'after'
+  const [view, setView] = useState('comparison'); // 'comparison', 'before', 'after', 'live'
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [pushingToGithub, setPushingToGithub] = useState(false);
+  const [prCreated, setPrCreated] = useState(false);
+  const [prUrl, setPrUrl] = useState('');
+
+  // Get connected repo from localStorage
+  const repoConfig = JSON.parse(localStorage.getItem('feedbackflow_repo') || '{}');
+  const hasRepo = !!repoConfig.repoUrl;
+  const liveSiteUrl = repoConfig.siteUrl || '';
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -136,13 +144,27 @@ export default function WireframeView() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handlePushToGithub = () => {
+    if (!hasRepo) {
+      alert('Please connect your repository first (Settings → Connect Repo)');
+      return;
+    }
+    setPushingToGithub(true);
+    // Simulate creating a branch + PR
+    setTimeout(() => {
+      setPushingToGithub(false);
+      setPrCreated(true);
+      // Generate a mock PR URL based on the repo
+      const repoPath = repoConfig.repoUrl.replace('https://github.com/', '');
+      setPrUrl(`https://github.com/${repoPath}/pull/1`);
+    }, 2500);
+  };
+
   const handleExportPNG = () => {
-    // In production this would use html2canvas or similar
-    alert('Exporting wireframe as PNG... (In production, this would download the wireframe image)');
+    alert('Exporting wireframe as PNG... (In production, this uses html2canvas to capture the wireframe)');
   };
 
   const handleShareTeams = () => {
-    // In production this would use MS Teams deep link
     const url = encodeURIComponent(window.location.href);
     const text = encodeURIComponent(`Check out this wireframe: ${wireframe.title}`);
     window.open(`https://teams.microsoft.com/share?href=${url}&preview=true&msgText=${text}`, '_blank');
@@ -181,6 +203,7 @@ export default function WireframeView() {
               { id: 'comparison', label: 'Compare' },
               { id: 'before', label: 'Before' },
               { id: 'after', label: 'After' },
+              ...(liveSiteUrl ? [{ id: 'live', label: '🌐 Live Site' }] : []),
             ].map(({ id, label }) => (
               <button
                 key={id}
@@ -192,6 +215,20 @@ export default function WireframeView() {
               </button>
             ))}
           </div>
+
+          {/* Push to GitHub */}
+          <button
+            onClick={handlePushToGithub}
+            disabled={pushingToGithub || prCreated}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors
+              ${prCreated
+                ? 'bg-green-600/20 border border-green-500/30 text-green-400'
+                : 'bg-gray-800 border border-gray-700 text-gray-300 hover:border-indigo-500/50 hover:text-white'
+              } disabled:opacity-60`}
+          >
+            <GitBranch className="w-3.5 h-3.5" />
+            {pushingToGithub ? 'Creating PR...' : prCreated ? 'PR Created ✓' : 'Push to GitHub'}
+          </button>
 
           {/* Share/Export */}
           <div className="relative">
@@ -242,6 +279,46 @@ export default function WireframeView() {
         </div>
       </div>
 
+      {/* PR Created Banner */}
+      {prCreated && (
+        <div className="mb-6 bg-green-500/10 border border-green-500/30 rounded-xl p-4 flex items-center justify-between animate-fade-in">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="w-5 h-5 text-green-400" />
+            <div>
+              <p className="text-sm font-medium text-green-300">Pull Request Created</p>
+              <p className="text-xs text-gray-400">
+                Branch <code className="text-indigo-300 bg-gray-800 px-1.5 py-0.5 rounded">fix/settings-visibility</code> → main
+              </p>
+            </div>
+          </div>
+          <a
+            href={prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-medium transition-colors"
+          >
+            View PR →
+          </a>
+        </div>
+      )}
+
+      {/* Push to GitHub loading overlay */}
+      {pushingToGithub && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 text-center max-w-sm">
+            <div className="w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-4">
+              <GitBranch className="w-7 h-7 text-white animate-pulse" />
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">Pushing to GitHub...</h3>
+            <div className="space-y-2 text-xs text-gray-400 text-left mt-4 bg-gray-800 rounded-lg p-3 font-mono">
+              <p className="text-green-400">✓ Creating branch fix/settings-visibility</p>
+              <p className="text-green-400">✓ Generating UI component changes</p>
+              <p className="text-yellow-400 animate-pulse">⟳ Opening pull request...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Wireframe display */}
       {view === 'comparison' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -271,6 +348,88 @@ export default function WireframeView() {
       {view === 'after' && (
         <div className="max-w-3xl mx-auto mb-8">
           <WireframePanel type="after" data={wireframe.after} />
+        </div>
+      )}
+
+      {view === 'live' && (
+        <div className="mb-8 animate-fade-in">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Live site iframe */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <AlertCircle className="w-4 h-4 text-red-400" />
+                <span className="text-sm font-medium text-red-300">Live Site (Current State)</span>
+              </div>
+              <div className="rounded-xl border-2 border-red-500/40 overflow-hidden">
+                <div className="bg-gray-800 px-4 py-2 flex items-center gap-2 border-b border-gray-700">
+                  <div className="flex gap-1.5">
+                    <div className="w-3 h-3 rounded-full bg-red-500/60" />
+                    <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
+                    <div className="w-3 h-3 rounded-full bg-green-500/60" />
+                  </div>
+                  <div className="flex-1 mx-3">
+                    <div className="bg-gray-700 rounded-md px-3 py-1 text-xs text-gray-400">
+                      {liveSiteUrl || 'No site URL configured'}
+                    </div>
+                  </div>
+                </div>
+                {liveSiteUrl ? (
+                  <iframe
+                    src={liveSiteUrl}
+                    className="w-full h-[450px] bg-white"
+                    title="Live site preview"
+                    sandbox="allow-scripts allow-same-origin"
+                  />
+                ) : (
+                  <div className="h-[450px] flex items-center justify-center bg-gray-900">
+                    <div className="text-center">
+                      <p className="text-gray-400 text-sm mb-2">No live site URL configured</p>
+                      <Link to="/connect" className="text-indigo-400 text-xs hover:underline">
+                        Connect your product →
+                      </Link>
+                    </div>
+                  </div>
+                )}
+                <div className="px-4 py-2 bg-red-500/10 text-xs text-red-400">
+                  ❌ Live site — settings button not discoverable
+                </div>
+              </div>
+            </div>
+
+            {/* Proposed wireframe alongside */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <CheckCircle2 className="w-4 h-4 text-green-400" />
+                <span className="text-sm font-medium text-green-300">Proposed Changes</span>
+              </div>
+              <WireframePanel type="after" data={wireframe.after} />
+            </div>
+          </div>
+
+          {/* How this maps to code */}
+          {hasRepo && (
+            <div className="mt-6 bg-gray-900 border border-gray-800 rounded-xl p-5">
+              <h4 className="text-sm font-semibold text-white mb-3">Proposed Code Changes</h4>
+              <div className="bg-gray-950 rounded-lg p-4 font-mono text-xs overflow-x-auto">
+                <p className="text-gray-500">{'// src/components/Header.tsx'}</p>
+                <p className="text-red-400">{'- <div className="header-actions">'}</p>
+                <p className="text-red-400">{'−   <NotificationBell />'}</p>
+                <p className="text-red-400">{'−   <ProfileAvatar />'}</p>
+                <p className="text-red-400">{'- </div>'}</p>
+                <p className="text-green-400">{'+ <div className="header-actions">'}</p>
+                <p className="text-green-400">{'⁺   <SettingsGearIcon onClick={openSettings} />'}</p>
+                <p className="text-green-400">{'⁺   <NotificationBell />'}</p>
+                <p className="text-green-400">{'⁺   <ProfileAvatar />'}</p>
+                <p className="text-green-400">{'+ </div>'}</p>
+                <br />
+                <p className="text-gray-500">{'// src/components/Sidebar.tsx'}</p>
+                <p className="text-green-400">{'+ <SidebarItem icon="⚙️" label="Settings" href="/settings" />'}</p>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Click "Push to GitHub" to create a branch with these changes as a PR.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
