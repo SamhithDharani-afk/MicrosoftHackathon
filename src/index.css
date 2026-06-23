@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #0a0a1a;
+  --bg-secondary: #111827;
+  --bg-card: #1f2937;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+  --border: #374151;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* React Flow overrides */
+.react-flow__background { background: #111827 !important; }
+.react-flow__minimap { background: #1f2937 !important; border: 1px solid #374151 !important; border-radius: 8px !important; }
+.react-flow__controls { border: 1px solid #374151 !important; border-radius: 8px !important; overflow: hidden; }
+.react-flow__controls-button { background: #1f2937 !important; border-color: #374151 !important; fill: #9ca3af !important; }
+.react-flow__controls-button:hover { background: #374151 !important; }
+
+@keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.animate-fade-in { animation: fade-in 0.4s ease-out; }
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 5px rgba(99, 102, 241, 0.3); }
+  50% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.5); }
+}
+.pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-primary); }
+::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
