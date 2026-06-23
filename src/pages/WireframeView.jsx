@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Monitor, Smartphone } from 'lucide-react';
+import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check } from 'lucide-react';
 import { wireframes } from '../data/mockData';
 
 function WireframePanel({ type, data }) {
@@ -127,6 +127,32 @@ export default function WireframeView() {
   const { id } = useParams();
   const wireframe = wireframes[id];
   const [view, setView] = useState('comparison'); // 'comparison', 'before', 'after'
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleExportPNG = () => {
+    // In production this would use html2canvas or similar
+    alert('Exporting wireframe as PNG... (In production, this would download the wireframe image)');
+  };
+
+  const handleShareTeams = () => {
+    // In production this would use MS Teams deep link
+    const url = encodeURIComponent(window.location.href);
+    const text = encodeURIComponent(`Check out this wireframe: ${wireframe.title}`);
+    window.open(`https://teams.microsoft.com/share?href=${url}&preview=true&msgText=${text}`, '_blank');
+  };
+
+  const handleShareEmail = () => {
+    const subject = encodeURIComponent(`Wireframe: ${wireframe.title}`);
+    const body = encodeURIComponent(`Hi team,\n\nCheck out this proposed design solution:\n\n${wireframe.title}\n${wireframe.description}\n\nView it here: ${window.location.href}\n\nBest regards`);
+    window.open(`mailto:?subject=${subject}&body=${body}`);
+  };
 
   if (!wireframe) {
     return (
@@ -148,22 +174,71 @@ export default function WireframeView() {
           <h1 className="text-2xl font-bold text-white mb-1">{wireframe.title}</h1>
           <p className="text-sm text-gray-400">{wireframe.description}</p>
         </div>
-        {/* View toggle */}
-        <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1 border border-gray-700">
-          {[
-            { id: 'comparison', label: 'Compare' },
-            { id: 'before', label: 'Before' },
-            { id: 'after', label: 'After' },
-          ].map(({ id, label }) => (
+        <div className="flex items-center gap-2 flex-shrink-0 ml-4">
+          {/* View toggle */}
+          <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1 border border-gray-700">
+            {[
+              { id: 'comparison', label: 'Compare' },
+              { id: 'before', label: 'Before' },
+              { id: 'after', label: 'After' },
+            ].map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors
+                  ${view === id ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Share/Export */}
+          <div className="relative">
             <button
-              key={id}
-              onClick={() => setView(id)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors
-                ${view === id ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              onClick={() => setShowShareMenu(!showShareMenu)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors"
             >
-              {label}
+              <Share2 className="w-3.5 h-3.5" />
+              Share
             </button>
-          ))}
+
+            {showShareMenu && (
+              <div className="absolute right-0 top-full mt-2 w-56 bg-gray-800 border border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden animate-fade-in">
+                <div className="p-2 space-y-1">
+                  <button
+                    onClick={handleCopyLink}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors text-left"
+                  >
+                    {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                    {copied ? 'Copied!' : 'Copy link'}
+                  </button>
+                  <button
+                    onClick={handleShareTeams}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors text-left"
+                  >
+                    <LinkIcon className="w-4 h-4" />
+                    Share to Teams
+                  </button>
+                  <button
+                    onClick={handleShareEmail}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors text-left"
+                  >
+                    <Share2 className="w-4 h-4" />
+                    Share via Email
+                  </button>
+                  <div className="border-t border-gray-700 my-1" />
+                  <button
+                    onClick={handleExportPNG}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-300 hover:bg-gray-700 hover:text-white transition-colors text-left"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export as PNG
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

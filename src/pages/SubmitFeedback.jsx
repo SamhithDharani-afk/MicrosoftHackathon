@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { Send, CheckCircle2 } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Send, CheckCircle2, ImagePlus, X } from 'lucide-react';
 
 export default function SubmitFeedback() {
   const [submitted, setSubmitted] = useState(false);
+  const [images, setImages] = useState([]); // { file, preview }
+  const fileInputRef = useRef(null);
   const [form, setForm] = useState({
     name: '',
     role: 'employee',
@@ -147,6 +149,70 @@ export default function SubmitFeedback() {
           <p className="text-xs text-gray-500 mt-1">
             Tip: Mention specific UI elements, pages, or workflows for better AI analysis.
           </p>
+        </div>
+
+        {/* Screenshot / Image Upload */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1.5">
+            Attach Screenshots <span className="text-gray-500 font-normal">(optional)</span>
+          </label>
+          <p className="text-xs text-gray-500 mb-3">
+            Screenshots help the AI understand exactly what you're seeing and produce better wireframes.
+          </p>
+
+          {/* Image previews */}
+          {images.length > 0 && (
+            <div className="flex flex-wrap gap-3 mb-3">
+              {images.map((img, i) => (
+                <div key={i} className="relative group">
+                  <img
+                    src={img.preview}
+                    alt={`Screenshot ${i + 1}`}
+                    className="w-24 h-24 object-cover rounded-lg border border-gray-700"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      URL.revokeObjectURL(img.preview);
+                      setImages(images.filter((_, idx) => idx !== i));
+                    }}
+                    className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center
+                               opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Upload area */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              const newImages = files.map(file => ({
+                file,
+                preview: URL.createObjectURL(file),
+              }));
+              setImages([...images, ...newImages]);
+              e.target.value = '';
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-gray-700
+                       text-sm text-gray-400 hover:border-indigo-500/50 hover:text-indigo-300 hover:bg-indigo-500/5
+                       transition-colors cursor-pointer"
+          >
+            <ImagePlus className="w-4 h-4" />
+            {images.length === 0 ? 'Click to upload screenshots' : 'Add more screenshots'}
+          </button>
         </div>
 
         {/* Submit */}
