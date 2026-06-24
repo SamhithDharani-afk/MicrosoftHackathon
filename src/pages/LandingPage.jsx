@@ -77,13 +77,22 @@ export default function LandingPage() {
             from "can't find settings" to "in-call controls disappear" — with AI-generated visual fixes.
             Switch between them right in the dashboard.
           </p>
-          <Link
-            to="/dashboard"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors"
-          >
-            Compare the dashboards
-            <ArrowRight className="w-4 h-4" />
-          </Link>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to="/submit"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors"
+            >
+              <MessageSquarePlus className="w-4 h-4" />
+              Submit Feedback
+            </Link>
+            <Link
+              to="/dashboard"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-white/5 border border-gray-600 hover:border-gray-400 text-white text-sm font-medium transition-colors"
+            >
+              Compare the dashboards
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
         </div>
       </section>
     </div>
