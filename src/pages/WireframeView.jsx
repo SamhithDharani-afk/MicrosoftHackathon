@@ -3,11 +3,11 @@ import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, GitBranch } from 'lucide-react';
 import { wireframes } from '../data/mockData';
 
-function WireframePanel({ type, data }) {
+function WireframePanel({ type, data, showCallouts = false }) {
   const isAfter = type === 'after';
 
   return (
-    <div className={`rounded-xl border-2 overflow-hidden ${isAfter ? 'border-green-500/40' : 'border-red-500/40'}`}>
+    <div className={`rounded-xl border-2 overflow-hidden relative ${isAfter ? 'border-green-500/40' : 'border-red-500/40'}`}>
       {/* Browser chrome */}
       <div className="bg-[#2b2b2b] px-4 py-2 flex items-center gap-2 border-b border-[#404040]">
         <div className="flex gap-1.5">
@@ -58,6 +58,15 @@ function WireframePanel({ type, data }) {
               <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 px-2 py-1 bg-indigo-600 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity z-10">
                 Settings
               </div>
+              {/* Red callout arrow */}
+              {showCallouts && (
+                <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center z-20 pointer-events-none">
+                  <div className="text-red-400 text-lg leading-none">↑</div>
+                  <div className="px-2 py-0.5 bg-red-500 text-white text-[9px] font-bold rounded whitespace-nowrap shadow-lg">
+                    NEW
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <div className="w-8 h-8 rounded-md flex items-center justify-center cursor-pointer hover:bg-white/10">
@@ -114,10 +123,19 @@ function WireframePanel({ type, data }) {
 
           {/* Settings — ONLY in "after" */}
           {isAfter && (
-            <div className="border-t border-[#333] pt-2">
+            <div className="border-t border-[#333] pt-2 relative">
               <div className="px-3 py-2 rounded-md text-xs text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 font-medium flex items-center gap-2.5 cursor-pointer pulse-glow">
                 <span className="w-4 text-center">⚙️</span> Settings
               </div>
+              {/* Red callout arrow */}
+              {showCallouts && (
+                <div className="absolute top-1/2 -translate-y-1/2 -right-16 flex items-center gap-0.5 z-20 pointer-events-none">
+                  <div className="text-red-400 text-lg leading-none">←</div>
+                  <div className="px-2 py-0.5 bg-red-500 text-white text-[9px] font-bold rounded whitespace-nowrap shadow-lg">
+                    NEW
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -443,7 +461,7 @@ export default function WireframeView() {
               <CheckCircle2 className="w-4 h-4 text-green-400" />
               <span className="text-sm font-medium text-green-300">Proposed (Solution)</span>
             </div>
-            <WireframePanel type="after" data={wireframe.after} />
+            <WireframePanel type="after" data={wireframe.after} showCallouts={true} />
           </div>
         </div>
       )}
@@ -456,7 +474,7 @@ export default function WireframeView() {
 
       {view === 'after' && (
         <div className="max-w-3xl mx-auto mb-8">
-          <WireframePanel type="after" data={wireframe.after} />
+          <WireframePanel type="after" data={wireframe.after} showCallouts={false} />
         </div>
       )}
 
