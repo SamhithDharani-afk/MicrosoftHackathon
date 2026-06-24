@@ -8,11 +8,14 @@ import PainPointDetail from './pages/PainPointDetail';
 import WireframeView from './pages/WireframeView';
 import ProcessFlowView from './pages/ProcessFlowView';
 import AddWebsite from './pages/AddWebsite';
+import PublicForm from './pages/PublicForm';
 
 export default function App() {
   return (
     <WebsitesProvider>
       <Routes>
+        {/* Standalone shareable form — no app nav, lives outside the Layout */}
+        <Route path="/form/:websiteId" element={<PublicForm />} />
         <Route path="/" element={<Layout />}>
           <Route index element={<LandingPage />} />
           <Route path="submit" element={<SubmitFeedback />} />

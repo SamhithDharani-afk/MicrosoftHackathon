@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { MessageSquarePlus, BarChart3, Workflow, ArrowRight, Globe } from 'lucide-react';
+import { MessageSquarePlus, BarChart3, Workflow, ArrowRight, Globe, X, Check, Share2 } from 'lucide-react';
 
 export default function LandingPage() {
   return (
@@ -64,6 +64,88 @@ export default function LandingPage() {
               )}
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Why FeedbackFlow beats traditional feedback intake */}
+      <section className="max-w-6xl mx-auto px-6 py-16">
+        <div className="text-center mb-12">
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">
+            A Better Way Than Traditional Feedback
+          </h2>
+          <p className="text-gray-400 max-w-2xl mx-auto">
+            Email threads, spreadsheets, and survey tools collect feedback — but then it sits there.
+            FeedbackFlow turns raw feedback into prioritized pain points and visual fixes, automatically.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Traditional */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-7">
+            <h3 className="text-lg font-semibold text-gray-300 mb-5 flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-gray-700/50 flex items-center justify-center">📥</span>
+              Traditional intake (email, forms, spreadsheets)
+            </h3>
+            <ul className="space-y-3">
+              {[
+                'Feedback scattered across inboxes, docs & survey tools',
+                'Someone has to manually read and tag every response',
+                'No way to see which issues are most common or severe',
+                'Insights stall as a spreadsheet — nothing gets built',
+                'One generic form; impossible to tell which product it’s about',
+                'Respondents must log in or hunt for the right link',
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-2.5 text-sm text-gray-400">
+                  <X className="w-4 h-4 text-red-400/80 mt-0.5 flex-shrink-0" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* FeedbackFlow */}
+          <div className="bg-gradient-to-br from-indigo-900/30 to-purple-900/20 border border-indigo-500/40 rounded-2xl p-7">
+            <h3 className="text-lg font-semibold text-white mb-5 flex items-center gap-2">
+              <span className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center">✨</span>
+              FeedbackFlow
+            </h3>
+            <ul className="space-y-3">
+              {[
+                'All feedback flows into one place, per website',
+                'AI auto-clusters submissions into pain points in real time',
+                'Severity & impact scoring surfaces what matters most',
+                'Generates wireframes, process flows & walkthroughs to fix it',
+                'Separate dashboard per product, so signal never gets mixed',
+                'Share a link — anyone can submit in under a minute, no login',
+              ].map((t) => (
+                <li key={t} className="flex items-start gap-2.5 text-sm text-gray-200">
+                  <Check className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        {/* Shareable-form callout */}
+        <div className="mt-6 bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col sm:flex-row items-center gap-5">
+          <div className="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center flex-shrink-0">
+            <Share2 className="w-6 h-6 text-indigo-400" />
+          </div>
+          <div className="flex-1 text-center sm:text-left">
+            <h4 className="text-white font-semibold mb-1">Shareable forms, like Google Forms</h4>
+            <p className="text-sm text-gray-400">
+              Every website gets its own public form link you can email, post, or embed. Employees and
+              customers submit feedback without visiting the app — and it lands straight on the dashboard.
+            </p>
+          </div>
+          <Link
+            to="/submit"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors flex-shrink-0"
+          >
+            <Share2 className="w-4 h-4" />
+            Get a shareable link
+          </Link>
         </div>
       </section>
 
