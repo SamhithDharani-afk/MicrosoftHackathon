@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, GitBranch } from 'lucide-react';
+import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check } from 'lucide-react';
 import { wireframes } from '../data/mockData';
 
 function WireframePanel({ type, data, showCallouts = false }) {
@@ -256,9 +256,6 @@ export default function WireframeView() {
   const [view, setView] = useState('comparison'); // 'comparison', 'before', 'after', 'live'
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [pushingToGithub, setPushingToGithub] = useState(false);
-  const [prCreated, setPrCreated] = useState(false);
-  const [prUrl, setPrUrl] = useState('');
 
   // Get connected repo from localStorage
   const repoConfig = JSON.parse(localStorage.getItem('feedbackflow_repo') || '{}');
@@ -269,22 +266,6 @@ export default function WireframeView() {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handlePushToGithub = () => {
-    if (!hasRepo) {
-      alert('Please connect your repository first (Settings → Connect Repo)');
-      return;
-    }
-    setPushingToGithub(true);
-    // Simulate creating a branch + PR
-    setTimeout(() => {
-      setPushingToGithub(false);
-      setPrCreated(true);
-      // Generate a mock PR URL based on the repo
-      const repoPath = repoConfig.repoUrl.replace('https://github.com/', '');
-      setPrUrl(`https://github.com/${repoPath}/pull/1`);
-    }, 2500);
   };
 
   const handleExportPNG = () => {
@@ -343,20 +324,6 @@ export default function WireframeView() {
             ))}
           </div>
 
-          {/* Push to GitHub */}
-          <button
-            onClick={handlePushToGithub}
-            disabled={pushingToGithub || prCreated}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors
-              ${prCreated
-                ? 'bg-green-600/20 border border-green-500/30 text-green-400'
-                : 'bg-gray-800 border border-gray-700 text-gray-300 hover:border-indigo-500/50 hover:text-white'
-              } disabled:opacity-60`}
-          >
-            <GitBranch className="w-3.5 h-3.5" />
-            {pushingToGithub ? 'Creating PR...' : prCreated ? 'PR Created ✓' : 'Push to GitHub'}
-          </button>
-
           {/* Share/Export */}
           <div className="relative">
             <button
@@ -405,46 +372,6 @@ export default function WireframeView() {
           </div>
         </div>
       </div>
-
-      {/* PR Created Banner */}
-      {prCreated && (
-        <div className="mb-6 bg-green-500/10 border border-green-500/30 rounded-xl p-4 flex items-center justify-between animate-fade-in">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-green-400" />
-            <div>
-              <p className="text-sm font-medium text-green-300">Pull Request Created</p>
-              <p className="text-xs text-gray-400">
-                Branch <code className="text-indigo-300 bg-gray-800 px-1.5 py-0.5 rounded">fix/settings-visibility</code> → main
-              </p>
-            </div>
-          </div>
-          <a
-            href={prUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-white text-xs font-medium transition-colors"
-          >
-            View PR →
-          </a>
-        </div>
-      )}
-
-      {/* Push to GitHub loading overlay */}
-      {pushingToGithub && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 text-center max-w-sm">
-            <div className="w-14 h-14 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-4">
-              <GitBranch className="w-7 h-7 text-white animate-pulse" />
-            </div>
-            <h3 className="text-lg font-semibold text-white mb-2">Pushing to GitHub...</h3>
-            <div className="space-y-2 text-xs text-gray-400 text-left mt-4 bg-gray-800 rounded-lg p-3 font-mono">
-              <p className="text-green-400">✓ Creating branch fix/settings-visibility</p>
-              <p className="text-green-400">✓ Generating UI component changes</p>
-              <p className="text-yellow-400 animate-pulse">⟳ Opening pull request...</p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Wireframe display */}
       {view === 'comparison' && (
@@ -553,7 +480,7 @@ export default function WireframeView() {
                 <p className="text-green-400">{'+ <SidebarItem icon="⚙️" label="Settings" href="/settings" />'}</p>
               </div>
               <p className="text-xs text-gray-500 mt-2">
-                Click "Push to GitHub" to create a branch with these changes as a PR.
+                These component changes implement the proposed design.
               </p>
             </div>
           )}
