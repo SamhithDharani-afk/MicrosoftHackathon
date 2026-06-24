@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { Send, CheckCircle2, ImagePlus, X, Sparkles, MessageCircle, Lightbulb, AlertTriangle, ChevronRight } from 'lucide-react';
 import { useWebsites } from '../context/WebsitesContext';
+import { submitFeedback } from '../utils/api';
 
 // ──────────────────────────────────────────────
 // AI Companion — analyzes feedback text in real-time and gives nudges
@@ -217,6 +219,8 @@ function AICompanion({ feedback, category, hasImages, onSuggestInsert }) {
 export default function SubmitFeedback() {
   const { websites, activeWebsiteId } = useWebsites();
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState(null);
   const [images, setImages] = useState([]);
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
@@ -230,9 +234,26 @@ export default function SubmitFeedback() {
     websiteId: activeWebsiteId,
   });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitted(true);
+    setSubmitError(null);
+    setSubmitting(true);
+    try {
+      await submitFeedback({
+        websiteId: form.websiteId,
+        submitter: form.name,
+        role: form.role,
+        department: form.department,
+        rating: form.rating,
+        text: form.feedback,
+        category: form.category,
+      });
+      setSubmitted(true);
+    } catch (err) {
+      setSubmitError(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSuggestInsert = useCallback((text) => {
@@ -250,15 +271,23 @@ export default function SubmitFeedback() {
         </div>
         <h2 className="text-2xl font-bold text-white mb-3">Thank You!</h2>
         <p className="text-gray-400 mb-6">
-          Your feedback has been submitted. Our AI will analyze it alongside other submissions 
-          to identify patterns and generate visual solutions.
+          Your feedback was saved to the {websites.find(w => w.id === form.websiteId)?.name || 'website'} dashboard.
+          Our AI analyzes it alongside other submissions to identify patterns and generate visual solutions.
         </p>
-        <button
-          onClick={() => { setSubmitted(false); setImages([]); setForm({ name: '', role: 'employee', department: '', rating: 3, feedback: '', category: 'general', websiteId: activeWebsiteId }); }}
-          className="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors"
-        >
-          Submit Another
-        </button>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => { setSubmitted(false); setImages([]); setForm({ name: '', role: 'employee', department: '', rating: 3, feedback: '', category: 'general', websiteId: activeWebsiteId }); }}
+            className="px-5 py-2.5 rounded-lg bg-white/5 border border-gray-700 hover:border-gray-500 text-white text-sm font-medium transition-colors"
+          >
+            Submit Another
+          </button>
+          <Link
+            to="/dashboard"
+            className="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors"
+          >
+            View on Dashboard
+          </Link>
+        </div>
       </div>
     );
   }
@@ -454,12 +483,21 @@ export default function SubmitFeedback() {
           {/* Submit */}
           <button
             type="submit"
+            disabled={submitting}
             className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 
+                       disabled:opacity-50 disabled:cursor-not-allowed
                        text-white font-semibold transition-all hover:scale-[1.02] shadow-lg shadow-indigo-600/20"
           >
             <Send className="w-4 h-4" />
-            Submit Feedback
+            {submitting ? 'Saving…' : 'Submit Feedback'}
           </button>
+
+          {submitError && (
+            <div className="flex items-center gap-2 justify-center text-red-400 text-sm">
+              <AlertTriangle className="w-4 h-4" />
+              {submitError}
+            </div>
+          )}
         </form>
 
         {/* Right: AI Companion */}

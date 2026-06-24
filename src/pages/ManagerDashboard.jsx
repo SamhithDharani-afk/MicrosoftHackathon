@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertTriangle, TrendingUp, Users, MessageSquare, ChevronDown, ChevronRight, Wand2, Image, Workflow, Eye, Sparkles, Globe, GitBranch, Plus } from 'lucide-react';
-import { getFeedbackForWebsite, getPainPointsForWebsite } from '../data/mockData';
+import { getPainPointsForWebsite } from '../data/mockData';
 import { useWebsites } from '../context/WebsitesContext';
+import { fetchFeedback } from '../utils/api';
 
 function PainPointCard({ pp, onGenerate }) {
   const [expanded, setExpanded] = useState(false);
@@ -111,9 +112,21 @@ export default function ManagerDashboard() {
   const navigate = useNavigate();
   const { websites, activeWebsite, activeWebsiteId, setActiveWebsite } = useWebsites();
   const [generating, setGenerating] = useState(null); // { ppId, type }
+  const [feedbackEntries, setFeedbackEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Everything below is scoped to the selected website.
-  const feedbackEntries = getFeedbackForWebsite(activeWebsiteId);
+  // Pull live feedback for the selected website from the database.
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    fetchFeedback(activeWebsiteId)
+      .then((rows) => { if (active) setFeedbackEntries(rows); })
+      .catch(() => { if (active) setFeedbackEntries([]); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [activeWebsiteId]);
+
+  // Pain points remain AI-analyzed (static) per website.
   const painPoints = getPainPointsForWebsite(activeWebsiteId);
 
   const totalFeedback = feedbackEntries.length;
@@ -221,7 +234,11 @@ export default function ManagerDashboard() {
       </div>
 
       {/* Empty state for a freshly added website */}
-      {totalFeedback === 0 ? (
+      {loading ? (
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-12 text-center text-sm text-gray-500">
+          Loading feedback…
+        </div>
+      ) : totalFeedback === 0 ? (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-12 text-center">
           <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 flex items-center justify-center mx-auto mb-4">
             <MessageSquare className="w-7 h-7 text-indigo-400" />
