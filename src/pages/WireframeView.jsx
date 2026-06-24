@@ -8,116 +8,225 @@ function WireframePanel({ type, data }) {
 
   return (
     <div className={`rounded-xl border-2 overflow-hidden ${isAfter ? 'border-green-500/40' : 'border-red-500/40'}`}>
-      {/* Browser chrome mockup */}
-      <div className="bg-gray-800 px-4 py-2 flex items-center gap-2 border-b border-gray-700">
+      {/* Browser chrome */}
+      <div className="bg-[#2b2b2b] px-4 py-2 flex items-center gap-2 border-b border-[#404040]">
         <div className="flex gap-1.5">
-          <div className="w-3 h-3 rounded-full bg-red-500/60" />
-          <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
-          <div className="w-3 h-3 rounded-full bg-green-500/60" />
+          <div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+          <div className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
+          <div className="w-3 h-3 rounded-full bg-[#28c840]" />
         </div>
         <div className="flex-1 mx-3">
-          <div className="bg-gray-700 rounded-md px-3 py-1 text-xs text-gray-400 max-w-xs">
-            engage.microsoft.com/feed
+          <div className="bg-[#3c3c3c] rounded-full px-3 py-1 text-xs text-gray-400 max-w-sm flex items-center gap-2">
+            <span className="text-gray-500">🔒</span> engage.cloud.microsoft/main/feed
           </div>
         </div>
       </div>
 
-      {/* App content */}
-      <div className="bg-gray-900 min-h-[400px]">
-        {/* Viva Engage Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-gray-800 border-b border-gray-700">
-          <div className="flex items-center gap-3">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
-              <span className="text-xs font-bold text-white">V</span>
+      {/* M365 Top Bar — dark navy bar that matches real M365 */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#1b1a19]">
+        {/* Left: Waffle + App name */}
+        <div className="flex items-center gap-3">
+          <div className="w-7 h-7 flex items-center justify-center cursor-pointer hover:bg-white/10 rounded">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="1" y="1" width="4" height="4" rx="0.5" fill="#9ca3af"/>
+              <rect x="6" y="1" width="4" height="4" rx="0.5" fill="#9ca3af"/>
+              <rect x="11" y="1" width="4" height="4" rx="0.5" fill="#9ca3af"/>
+              <rect x="1" y="6" width="4" height="4" rx="0.5" fill="#9ca3af"/>
+              <rect x="6" y="6" width="4" height="4" rx="0.5" fill="#9ca3af"/>
+              <rect x="11" y="6" width="4" height="4" rx="0.5" fill="#9ca3af"/>
+              <rect x="1" y="11" width="4" height="4" rx="0.5" fill="#9ca3af"/>
+              <rect x="6" y="11" width="4" height="4" rx="0.5" fill="#9ca3af"/>
+              <rect x="11" y="11" width="4" height="4" rx="0.5" fill="#9ca3af"/>
+            </svg>
+          </div>
+          <span className="text-sm text-white font-normal">Engage</span>
+        </div>
+        {/* Center: Search bar */}
+        <div className="flex-1 max-w-md mx-6">
+          <div className="bg-[#3c3c3c] rounded-md px-3 py-1.5 flex items-center gap-2">
+            <span className="text-gray-500 text-xs">🔍</span>
+            <span className="text-xs text-gray-500">Search Engage</span>
+          </div>
+        </div>
+        {/* Right: Icons */}
+        <div className="flex items-center gap-1">
+          {isAfter && (
+            <div className="relative group">
+              <div className="w-8 h-8 rounded-md flex items-center justify-center cursor-pointer bg-indigo-500/20 border border-indigo-400 pulse-glow">
+                <span className="text-sm">⚙️</span>
+              </div>
+              <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 px-2 py-1 bg-indigo-600 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity z-10">
+                Settings
+              </div>
             </div>
-            <span className="text-sm font-semibold text-white">Viva Engage</span>
-            <div className="hidden sm:flex items-center ml-4 gap-1">
-              <div className="px-2.5 py-1 rounded-md text-xs text-gray-400 hover:bg-gray-700">Home</div>
-              <div className="px-2.5 py-1 rounded-md text-xs text-gray-400 hover:bg-gray-700">Communities</div>
-              <div className="px-2.5 py-1 rounded-md text-xs text-gray-400 hover:bg-gray-700">Storyline</div>
+          )}
+          <div className="w-8 h-8 rounded-md flex items-center justify-center cursor-pointer hover:bg-white/10">
+            <span className="text-sm">🔔</span>
+          </div>
+          <div className="w-8 h-8 rounded-md flex items-center justify-center cursor-pointer hover:bg-white/10">
+            <span className="text-xs">💬</span>
+          </div>
+          <div className="w-7 h-7 rounded-full bg-[#7c4dff] flex items-center justify-center text-[10px] font-semibold text-white ml-1 cursor-pointer">
+            JD
+          </div>
+        </div>
+      </div>
+
+      {/* Main body */}
+      <div className="flex bg-[#1f1f1f] min-h-[420px]">
+        {/* Left Sidebar — matches real Viva Engage nav */}
+        <div className="w-56 border-r border-[#333] bg-[#1f1f1f] p-2 space-y-0.5 hidden md:flex flex-col">
+          <div className="px-3 py-2 rounded-md text-xs text-white bg-[#333] font-medium flex items-center gap-2.5">
+            <span className="w-4 text-center">🏠</span> Home
+          </div>
+          <div className="px-3 py-2 rounded-md text-xs text-gray-400 hover:bg-[#2a2a2a] flex items-center gap-2.5 cursor-pointer">
+            <span className="w-4 text-center">📢</span> Storyline
+          </div>
+          <div className="px-3 py-2 rounded-md text-xs text-gray-400 hover:bg-[#2a2a2a] flex items-center gap-2.5 cursor-pointer">
+            <span className="w-4 text-center">💬</span> Communities
+          </div>
+          <div className="px-3 py-2 rounded-md text-xs text-gray-400 hover:bg-[#2a2a2a] flex items-center gap-2.5 cursor-pointer">
+            <span className="w-4 text-center">📥</span> Inbox
+          </div>
+          <div className="px-3 py-2 rounded-md text-xs text-gray-400 hover:bg-[#2a2a2a] flex items-center gap-2.5 cursor-pointer">
+            <span className="w-4 text-center">🔖</span> Bookmarks
+          </div>
+
+          {/* Separator */}
+          <div className="border-t border-[#333] my-2" />
+
+          <div className="px-3 py-1 text-[10px] text-gray-500 uppercase tracking-wider">Communities</div>
+          <div className="px-3 py-1.5 rounded-md text-xs text-gray-400 hover:bg-[#2a2a2a] flex items-center gap-2.5 cursor-pointer">
+            <div className="w-4 h-4 rounded bg-blue-600 flex items-center justify-center text-[8px] text-white">A</div>
+            All Company
+          </div>
+          <div className="px-3 py-1.5 rounded-md text-xs text-gray-400 hover:bg-[#2a2a2a] flex items-center gap-2.5 cursor-pointer">
+            <div className="w-4 h-4 rounded bg-green-600 flex items-center justify-center text-[8px] text-white">E</div>
+            Engineering
+          </div>
+          <div className="px-3 py-1.5 rounded-md text-xs text-gray-400 hover:bg-[#2a2a2a] flex items-center gap-2.5 cursor-pointer">
+            <div className="w-4 h-4 rounded bg-orange-600 flex items-center justify-center text-[8px] text-white">H</div>
+            HR Updates
+          </div>
+
+          {/* Spacer to push settings to bottom */}
+          <div className="flex-1" />
+
+          {/* Settings — ONLY in "after" */}
+          {isAfter && (
+            <div className="border-t border-[#333] pt-2">
+              <div className="px-3 py-2 rounded-md text-xs text-indigo-300 bg-indigo-500/15 border border-indigo-500/30 font-medium flex items-center gap-2.5 cursor-pointer pulse-glow">
+                <span className="w-4 text-center">⚙️</span> Settings
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Center Feed */}
+        <div className="flex-1 max-w-xl mx-auto p-4 space-y-3">
+          {/* Post composer */}
+          <div className="bg-[#292929] rounded-lg border border-[#3a3a3a] p-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#7c4dff] flex items-center justify-center text-[10px] font-semibold text-white">JD</div>
+              <div className="flex-1 bg-[#3a3a3a] rounded-full px-4 py-2 text-xs text-gray-500 cursor-text">
+                Start a conversation...
+              </div>
+            </div>
+            <div className="flex items-center gap-3 mt-2 pl-11">
+              <span className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300">📷 Photo</span>
+              <span className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300">📎 File</span>
+              <span className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300">📊 Poll</span>
+              <span className="text-[10px] text-gray-500 cursor-pointer hover:text-gray-300">🎉 Praise</span>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {/* THE KEY CHANGE: Gear icon visibility */}
-            {isAfter ? (
-              <div className="relative group">
-                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 border-2 border-indigo-400 flex items-center justify-center cursor-pointer hover:bg-indigo-500/30 transition-colors pulse-glow">
-                  <span className="text-sm">⚙️</span>
+
+          {/* Feed posts */}
+          <div className="bg-[#292929] rounded-lg border border-[#3a3a3a] p-3">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-teal-600 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0">AJ</div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold text-white">Alex Johnson</span>
+                  <span className="text-[10px] text-gray-500">in All Company • 2h</span>
                 </div>
-                <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 px-2 py-1 bg-indigo-600 text-white text-xs rounded opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity">
-                  Settings
+                <p className="text-xs text-gray-300 leading-relaxed">Great Q2 results everyone! 🎉 Let's keep the momentum going into the second half of the year.</p>
+                <div className="flex items-center gap-4 mt-2 pt-2 border-t border-[#3a3a3a]">
+                  <span className="text-[10px] text-gray-500 cursor-pointer hover:text-blue-400">👍 12</span>
+                  <span className="text-[10px] text-gray-500 cursor-pointer hover:text-blue-400">💬 Reply</span>
+                  <span className="text-[10px] text-gray-500 cursor-pointer hover:text-blue-400">↗️ Share</span>
                 </div>
               </div>
-            ) : null}
-            <div className="w-8 h-8 rounded-lg bg-gray-700 flex items-center justify-center text-sm cursor-pointer">🔍</div>
-            <div className="w-8 h-8 rounded-lg bg-gray-700 flex items-center justify-center text-sm cursor-pointer">🔔</div>
-            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-medium text-white cursor-pointer">JD</div>
+            </div>
+          </div>
+
+          <div className="bg-[#292929] rounded-lg border border-[#3a3a3a] p-3">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-pink-600 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0">MP</div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold text-white">Maya Patel</span>
+                  <span className="text-[10px] text-gray-500">in Engineering • 5h</span>
+                </div>
+                <p className="text-xs text-gray-300 leading-relaxed">Heads up — deployment window for the new auth service is this Friday 4-6pm PST. Please review the runbook.</p>
+                <div className="h-14 bg-[#3a3a3a] rounded mt-2 flex items-center px-3">
+                  <span className="text-[10px] text-gray-500">📄 deployment-runbook-v2.pdf</span>
+                </div>
+                <div className="flex items-center gap-4 mt-2 pt-2 border-t border-[#3a3a3a]">
+                  <span className="text-[10px] text-gray-500 cursor-pointer hover:text-blue-400">👍 8</span>
+                  <span className="text-[10px] text-gray-500 cursor-pointer hover:text-blue-400">💬 3 replies</span>
+                  <span className="text-[10px] text-gray-500 cursor-pointer hover:text-blue-400">↗️ Share</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-[#292929] rounded-lg border border-[#3a3a3a] p-3">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-amber-600 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0">SL</div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold text-white">Sam Lee</span>
+                  <span className="text-[10px] text-gray-500">in HR Updates • 1d</span>
+                </div>
+                <p className="text-xs text-gray-300 leading-relaxed">Reminder: Open enrollment closes next Friday. Please update your benefits selections.</p>
+                <div className="flex items-center gap-4 mt-2 pt-2 border-t border-[#3a3a3a]">
+                  <span className="text-[10px] text-gray-500 cursor-pointer hover:text-blue-400">👍 24</span>
+                  <span className="text-[10px] text-gray-500 cursor-pointer hover:text-blue-400">💬 5 replies</span>
+                  <span className="text-[10px] text-gray-500 cursor-pointer hover:text-blue-400">↗️ Share</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Body */}
-        <div className="flex">
-          {/* Sidebar */}
-          <div className="w-52 border-r border-gray-800 p-3 space-y-1 hidden md:block min-h-[340px] flex flex-col">
-            <div className="px-3 py-2 rounded-lg text-xs text-white bg-gray-800 font-medium">🏠 Home</div>
-            <div className="px-3 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800/50">💬 Communities</div>
-            <div className="px-3 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800/50">📢 Announcements</div>
-            <div className="px-3 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800/50">👥 People</div>
-            <div className="px-3 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800/50">📊 Analytics</div>
-            
-            {/* Settings in sidebar for "after" */}
-            {isAfter && (
-              <>
-                <div className="flex-1" />
-                <div className="border-t border-gray-800 pt-2 mt-auto">
-                  <div className="px-3 py-2 rounded-lg text-xs text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 font-medium pulse-glow">
-                    ⚙️ Settings
-                  </div>
-                </div>
-              </>
-            )}
+        {/* Right panel — trending/info */}
+        <div className="w-48 border-l border-[#333] p-3 space-y-3 hidden lg:block">
+          <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium">Trending</div>
+          <div className="space-y-2">
+            <div className="text-xs text-gray-400 cursor-pointer hover:text-white">#Q2Results</div>
+            <div className="text-xs text-gray-400 cursor-pointer hover:text-white">#NewHires</div>
+            <div className="text-xs text-gray-400 cursor-pointer hover:text-white">#CompanyEvent</div>
           </div>
-
-          {/* Feed content area */}
-          <div className="flex-1 p-4 space-y-3">
-            {/* Post cards */}
-            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-6 h-6 rounded-full bg-green-500" />
-                <span className="text-xs text-gray-300">Alex Johnson</span>
-                <span className="text-xs text-gray-600">• 2h ago</span>
-              </div>
-              <div className="h-3 bg-gray-700 rounded w-4/5 mb-1.5" />
-              <div className="h-3 bg-gray-700 rounded w-3/5" />
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-6 h-6 rounded-full bg-orange-500" />
-                <span className="text-xs text-gray-300">Maya Patel</span>
-                <span className="text-xs text-gray-600">• 5h ago</span>
-              </div>
-              <div className="h-3 bg-gray-700 rounded w-full mb-1.5" />
-              <div className="h-3 bg-gray-700 rounded w-2/3" />
-              <div className="h-16 bg-gray-700/50 rounded mt-3" />
-            </div>
-            <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-6 h-6 rounded-full bg-purple-500" />
-                <span className="text-xs text-gray-300">Sam Lee</span>
-                <span className="text-xs text-gray-600">• 1d ago</span>
-              </div>
-              <div className="h-3 bg-gray-700 rounded w-3/4" />
-            </div>
+          <div className="border-t border-[#333] pt-3 mt-3">
+            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-medium mb-2">Suggested</div>
+            <div className="text-xs text-blue-400 cursor-pointer hover:underline">+ Join Design Team</div>
           </div>
         </div>
       </div>
 
       {/* Annotation bar */}
-      <div className={`px-4 py-2.5 text-xs font-medium ${isAfter ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-        {isAfter
-          ? '✅ Settings accessible from header gear icon AND sidebar — 1 click from anywhere'
-          : '❌ Settings hidden inside profile dropdown menu — requires 3+ clicks to discover'
-        }
+      <div className={`px-4 py-2.5 text-xs font-medium flex items-center gap-2 ${isAfter ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+        {isAfter ? (
+          <>
+            <span>✅</span>
+            <span>Settings now accessible via header gear icon (top-right) and sidebar (bottom-left) — 1 click from anywhere</span>
+          </>
+        ) : (
+          <>
+            <span>❌</span>
+            <span>Settings hidden inside profile avatar dropdown → requires clicking avatar → finding "Settings" in menu → 3+ clicks, easily missed</span>
+          </>
+        )}
       </div>
     </div>
   );
