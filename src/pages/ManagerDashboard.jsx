@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertTriangle, TrendingUp, Users, MessageSquare, ChevronDown, ChevronRight, Wand2, Image, Workflow, Eye, Sparkles, Globe, GitBranch, Plus } from 'lucide-react';
+import { AlertTriangle, TrendingUp, Smile, MessageSquare, ChevronDown, ChevronRight, Wand2, Image, Workflow, Eye, Sparkles, Globe, GitBranch, Plus } from 'lucide-react';
 import { useWebsites } from '../context/WebsitesContext';
 import { fetchFeedback, fetchPainPoints } from '../utils/api';
 
@@ -136,9 +136,12 @@ export default function ManagerDashboard() {
 
   const totalFeedback = feedbackEntries.length;
   const criticalCount = painPoints.filter(p => p.severity === 'critical').length;
-  const avgImpact = painPoints.length
-    ? Math.round(painPoints.reduce((sum, p) => sum + p.impactScore, 0) / painPoints.length)
+  // Satisfaction: average severity rating (1=Critical … 5=Minor) mapped to a
+  // 0–100% score where higher = healthier product. Easy to read at a glance.
+  const avgRating = totalFeedback
+    ? feedbackEntries.reduce((sum, f) => sum + (f.rating ?? 3), 0) / totalFeedback
     : 0;
+  const satisfaction = totalFeedback ? Math.round(((avgRating - 1) / 4) * 100) : 0;
 
   const handleGenerate = (pp, type) => {
     setGenerating({ ppId: pp.id, type });
@@ -269,7 +272,7 @@ export default function ManagerDashboard() {
               { label: 'Submissions', value: totalFeedback, icon: MessageSquare, accent: 'text-indigo-400', bg: 'bg-indigo-500/10' },
               { label: 'Pain Points', value: painPoints.length, icon: AlertTriangle, accent: 'text-amber-400', bg: 'bg-amber-500/10' },
               { label: 'Critical', value: criticalCount, icon: TrendingUp, accent: 'text-red-400', bg: 'bg-red-500/10' },
-              { label: 'Impact Avg', value: `${avgImpact}%`, icon: Users, accent: 'text-green-400', bg: 'bg-green-500/10' },
+              { label: 'Satisfaction', value: `${satisfaction}%`, icon: Smile, accent: 'text-green-400', bg: 'bg-green-500/10' },
             ].map(({ label, value, icon: Icon, accent, bg }) => (
               <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 flex items-center gap-3">
                 <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center`}>
