@@ -5,7 +5,8 @@ import { painPoints, walkthroughs } from '../data/mockData';
 export default function PainPointDetail() {
   const { id } = useParams();
   const painPoint = painPoints.find(p => p.id === id);
-  const walkthrough = walkthroughs['sol-003'];
+  const walkthroughSol = painPoint?.solutions.find(s => s.type === 'walkthrough');
+  const walkthrough = walkthroughs[walkthroughSol?.id] || walkthroughs['sol-003'];
 
   if (!painPoint) {
     return (
@@ -29,7 +30,7 @@ export default function PainPointDetail() {
       <section className="mb-10">
         <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
           <Play className="w-5 h-5 text-green-400" />
-          Visual Walkthrough: How to Make Settings Accessible
+          {walkthrough.title || 'Visual Walkthrough'}
         </h2>
 
         <div className="space-y-4">

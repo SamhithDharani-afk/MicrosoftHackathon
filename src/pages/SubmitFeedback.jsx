@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, CheckCircle2, ImagePlus, X, Sparkles, MessageCircle, Lightbulb, AlertTriangle, ChevronRight } from 'lucide-react';
+import { useWebsites } from '../context/WebsitesContext';
 
 // ──────────────────────────────────────────────
 // AI Companion — analyzes feedback text in real-time and gives nudges
@@ -214,6 +215,7 @@ function AICompanion({ feedback, category, hasImages, onSuggestInsert }) {
 // ──────────────────────────────────────────────
 
 export default function SubmitFeedback() {
+  const { websites, activeWebsiteId } = useWebsites();
   const [submitted, setSubmitted] = useState(false);
   const [images, setImages] = useState([]);
   const fileInputRef = useRef(null);
@@ -225,6 +227,7 @@ export default function SubmitFeedback() {
     rating: 3,
     feedback: '',
     category: 'general',
+    websiteId: activeWebsiteId,
   });
 
   const handleSubmit = (e) => {
@@ -251,7 +254,7 @@ export default function SubmitFeedback() {
           to identify patterns and generate visual solutions.
         </p>
         <button
-          onClick={() => { setSubmitted(false); setImages([]); setForm({ name: '', role: 'employee', department: '', rating: 3, feedback: '', category: 'general' }); }}
+          onClick={() => { setSubmitted(false); setImages([]); setForm({ name: '', role: 'employee', department: '', rating: 3, feedback: '', category: 'general', websiteId: activeWebsiteId }); }}
           className="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors"
         >
           Submit Another
@@ -270,6 +273,24 @@ export default function SubmitFeedback() {
       <div className="flex gap-6">
         {/* Left: Form */}
         <form onSubmit={handleSubmit} className="flex-1 space-y-5">
+          {/* Which website is this about */}
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Which website is this about?</label>
+            <select
+              value={form.websiteId}
+              onChange={(e) => setForm({ ...form, websiteId: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg bg-gray-800 border border-indigo-500/40 text-white text-sm
+                         focus:outline-none focus:border-indigo-500 transition-colors"
+            >
+              {websites.map((w) => (
+                <option key={w.id} value={w.id}>{w.emoji} {w.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Feedback is routed to this website's dashboard so its pain points stay separate.
+            </p>
+          </div>
+
           {/* Name & Role */}
           <div className="grid grid-cols-2 gap-4">
             <div>
