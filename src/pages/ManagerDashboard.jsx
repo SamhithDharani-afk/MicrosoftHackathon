@@ -1,8 +1,16 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, TrendingUp, Users, MessageSquare, Eye, Workflow, Image } from 'lucide-react';
-import { painPoints, feedbackEntries } from '../data/mockData';
+import { painPoints } from '../data/mockData';
+import { getFeedback } from '../api';
 
 export default function ManagerDashboard() {
+  const [feedbackEntries, setFeedbackEntries] = useState([]);
+
+  useEffect(() => {
+    getFeedback().then(setFeedbackEntries).catch(() => setFeedbackEntries([]));
+  }, []);
+
   const totalFeedback = feedbackEntries.length;
   const criticalCount = painPoints.filter(p => p.severity === 'critical').length;
   const avgImpact = Math.round(painPoints.reduce((sum, p) => sum + p.impactScore, 0) / painPoints.length);

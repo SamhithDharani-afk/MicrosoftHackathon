@@ -1,20 +1,57 @@
 import { useState } from 'react';
-import { Send, CheckCircle2 } from 'lucide-react';
+import { Send, CheckCircle2, Upload, X } from 'lucide-react';
+import { submitFeedback } from '../api';
+
+const initialForm = {
+  name: '',
+  role: 'employee',
+  department: '',
+  url: '',
+  frequency: 'first-time',
+  rating: 3,
+  feedback: '',
+  category: 'general',
+  suggestedFix: '',
+};
 
 export default function SubmitFeedback() {
   const [submitted, setSubmitted] = useState(false);
-  const [form, setForm] = useState({
-    name: '',
-    role: 'employee',
-    department: '',
-    rating: 3,
-    feedback: '',
-    category: 'general',
-  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
+  const [form, setForm] = useState(initialForm);
+  const [attachment, setAttachment] = useState(null);
 
-  const handleSubmit = (e) => {
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (attachment?.url) URL.revokeObjectURL(attachment.url);
+    const url = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+    setAttachment({ file, url });
+  };
+
+  const removeAttachment = () => {
+    if (attachment?.url) URL.revokeObjectURL(attachment.url);
+    setAttachment(null);
+  };
+
+  const resetForm = () => {
+    setForm(initialForm);
+    removeAttachment();
+    setError(null);
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setSubmitted(true);
+    setSubmitting(true);
+    setError(null);
+    try {
+      await submitFeedback(form, attachment?.file);
+      setSubmitted(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (submitted) {
@@ -29,7 +66,7 @@ export default function SubmitFeedback() {
           to identify patterns and generate visual solutions.
         </p>
         <button
-          onClick={() => { setSubmitted(false); setForm({ name: '', role: 'employee', department: '', rating: 3, feedback: '', category: 'general' }); }}
+          onClick={() => { setSubmitted(false); resetForm(); }}
           className="px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors"
         >
           Submit Another
@@ -106,6 +143,35 @@ export default function SubmitFeedback() {
           </div>
         </div>
 
+        {/* URL & Frequency */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1.5">Page URL</label>
+            <input
+              type="url"
+              value={form.url}
+              onChange={(e) => setForm({ ...form, url: e.target.value })}
+              className="w-full px-4 py-2.5 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm
+                         focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition-colors"
+              placeholder="https://engage.cloud.microsoft/..."
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1.5">How often does this happen?</label>
+            <select
+              value={form.frequency}
+              onChange={(e) => setForm({ ...form, frequency: e.target.value })}
+              className="w-full px-4 py-2.5 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm
+                         focus:outline-none focus:border-indigo-500 transition-colors"
+            >
+              <option value="first-time">First time</option>
+              <option value="weekly">Weekly</option>
+              <option value="daily">Daily</option>
+              <option value="every-time">Every time</option>
+            </select>
+          </div>
+        </div>
+
         {/* Rating */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1.5">
@@ -149,14 +215,85 @@ export default function SubmitFeedback() {
           </p>
         </div>
 
+        {/* Screenshot / Attachment */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1.5">
+            Screenshot or attachment <span className="text-gray-500 font-normal">(optional)</span>
+          </label>
+          {attachment ? (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-gray-800 border border-gray-700">
+              {attachment.url ? (
+                <img src={attachment.url} alt="Attachment preview" className="w-16 h-16 rounded-md object-cover border border-gray-700" />
+              ) : (
+                <div className="w-16 h-16 rounded-md bg-gray-700 flex items-center justify-center">
+                  <Upload className="w-6 h-6 text-gray-400" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white truncate">{attachment.file.name}</p>
+                <p className="text-xs text-gray-500">{(attachment.file.size / 1024).toFixed(1)} KB</p>
+              </div>
+              <button
+                type="button"
+                onClick={removeAttachment}
+                className="p-1.5 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 transition-colors"
+                aria-label="Remove attachment"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <label className="flex flex-col items-center justify-center gap-2 px-4 py-6 rounded-lg border-2 border-dashed border-gray-700
+                              bg-gray-800/50 cursor-pointer hover:border-indigo-500 hover:bg-gray-800 transition-colors text-center">
+              <Upload className="w-6 h-6 text-gray-500" />
+              <span className="text-sm text-gray-400">Click to upload a screenshot or file</span>
+              <span className="text-xs text-gray-600">PNG, JPG, or PDF up to 10MB</span>
+              <input
+                type="file"
+                accept="image/*,.pdf"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </label>
+          )}
+        </div>
+
+        {/* What would fix this */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1.5">
+            What would fix this for you? <span className="text-gray-500 font-normal">(optional)</span>
+          </label>
+          <textarea
+            rows={3}
+            value={form.suggestedFix}
+            onChange={(e) => setForm({ ...form, suggestedFix: e.target.value })}
+            className="w-full px-4 py-3 rounded-lg bg-gray-800 border border-gray-700 text-white text-sm
+                       focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30
+                       transition-colors resize-none"
+            placeholder="e.g., Add a visible gear icon in the top-right corner"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Your suggested fix feeds our AI's solution generation.
+          </p>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
         {/* Submit */}
         <button
           type="submit"
+          disabled={submitting}
           className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 
-                     text-white font-semibold transition-all hover:scale-[1.02] shadow-lg shadow-indigo-600/20"
+                     text-white font-semibold transition-all hover:scale-[1.02] shadow-lg shadow-indigo-600/20
+                     disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
           <Send className="w-4 h-4" />
-          Submit Feedback
+          {submitting ? 'Submitting…' : 'Submit Feedback'}
         </button>
       </form>
     </div>
