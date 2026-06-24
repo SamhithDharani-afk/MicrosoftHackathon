@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AlertTriangle, TrendingUp, Gauge, MessageSquare, ChevronDown, ChevronRight, Wand2, Image, Workflow, Eye, Sparkles, Globe, GitBranch, Plus } from 'lucide-react';
 import { useWebsites } from '../context/WebsitesContext';
 import { fetchFeedback, fetchPainPoints } from '../utils/api';
+import { severityMeta } from '../utils/severity';
 
 function PainPointCard({ pp, onGenerate }) {
   const [expanded, setExpanded] = useState(false);
@@ -136,12 +137,11 @@ export default function ManagerDashboard() {
 
   const totalFeedback = feedbackEntries.length;
   const criticalCount = painPoints.filter(p => p.severity === 'critical').length;
-  // Share of feedback that flags a serious problem (rated 1–2 = critical/severe).
-  // Honest about being per-issue — it says how serious incoming feedback is,
-  // not whether people are happy with the product overall.
-  const severeShare = totalFeedback
-    ? Math.round((feedbackEntries.filter(f => (f.rating ?? 3) <= 2).length / totalFeedback) * 100)
+  // Average severity rating (1 = Mild … 5 = Critical) across all feedback.
+  const avgSeverity = totalFeedback
+    ? feedbackEntries.reduce((sum, f) => sum + (f.rating ?? 3), 0) / totalFeedback
     : 0;
+  const avgSeverityMeta = severityMeta(avgSeverity);
 
   const handleGenerate = (pp, type) => {
     setGenerating({ ppId: pp.id, type });
@@ -272,7 +272,7 @@ export default function ManagerDashboard() {
               { label: 'Submissions', value: totalFeedback, icon: MessageSquare, accent: 'text-indigo-400', bg: 'bg-indigo-500/10' },
               { label: 'Pain Points', value: painPoints.length, icon: AlertTriangle, accent: 'text-amber-400', bg: 'bg-amber-500/10' },
               { label: 'Critical', value: criticalCount, icon: TrendingUp, accent: 'text-red-400', bg: 'bg-red-500/10' },
-              { label: 'Severe', value: `${severeShare}%`, icon: Gauge, accent: 'text-orange-400', bg: 'bg-orange-500/10' },
+              { label: 'Avg Severity', value: totalFeedback ? `${avgSeverity.toFixed(1)}/5` : '—', icon: Gauge, accent: avgSeverityMeta.text, bg: avgSeverityMeta.bg },
             ].map(({ label, value, icon: Icon, accent, bg }) => (
               <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 flex items-center gap-3">
                 <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center`}>
@@ -326,9 +326,8 @@ export default function ManagerDashboard() {
                         <span className="text-gray-500 text-xs ml-1.5">({fb.role})</span>
                       </td>
                       <td className="px-5 py-3">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium
-                          ${fb.rating <= 2 ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                          {fb.rating}/5
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${severityMeta(fb.rating).badge}`}>
+                          {fb.rating}/5 · {severityMeta(fb.rating).label}
                         </span>
                       </td>
                       <td className="px-5 py-3 text-gray-300 max-w-lg truncate">{fb.text}</td>

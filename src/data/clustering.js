@@ -90,7 +90,7 @@ export function clusterFeedback(feedback, websiteId, curatedPainPoints = []) {
     const avgRating = items.reduce((s, f) => s + (f.rating ?? 3), 0) / count;
     const impactScore = Math.max(
       0,
-      Math.min(99, Math.round(count * 14 + (5 - avgRating) * 12))
+      Math.min(99, Math.round(count * 14 + (avgRating - 1) * 12))
     );
     const departments = [...new Set(items.map((f) => f.department).filter(Boolean))];
     const relatedFeedback = items.map((f) => f.id);
@@ -119,7 +119,7 @@ export function clusterFeedback(feedback, websiteId, curatedPainPoints = []) {
     } else {
       const sample = items
         .slice()
-        .sort((a, b) => (a.rating ?? 3) - (b.rating ?? 3))[0];
+        .sort((a, b) => (b.rating ?? 3) - (a.rating ?? 3))[0];
       const titleLabel = topic.label.replace(/(^\w)/, (m) => m.toUpperCase());
       painPoints.push({
         id: `pp-auto-${websiteId}-${topic.key}`,

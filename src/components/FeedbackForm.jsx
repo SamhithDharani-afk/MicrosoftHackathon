@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Send, CheckCircle2, ImagePlus, X, Sparkles, MessageCircle, Lightbulb, AlertTriangle, ChevronRight } from 'lucide-react';
 import { useWebsites } from '../context/WebsitesContext';
 import { submitFeedback } from '../utils/api';
+import { severityMeta } from '../utils/severity';
 
 // ──────────────────────────────────────────────
 // AI Companion — analyzes feedback text in real-time and gives nudges
@@ -388,7 +389,7 @@ export default function FeedbackForm({ lockedWebsiteId = null, showDashboardLink
         {/* Rating */}
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-1">
-            Severity (1 = Critical, 5 = Minor)
+            Severity (1 = Mild, 5 = Critical)
           </label>
           <div className="flex gap-2">
             {[1, 2, 3, 4, 5].map((n) => (
@@ -398,7 +399,7 @@ export default function FeedbackForm({ lockedWebsiteId = null, showDashboardLink
                 onClick={() => setForm({ ...form, rating: n })}
                 className={`w-9 h-9 rounded-lg font-medium text-sm transition-all
                   ${form.rating === n
-                    ? 'bg-indigo-600 text-white scale-110'
+                    ? `${severityMeta(n).solid} text-white scale-110`
                     : 'bg-gray-800 border border-gray-700 text-gray-400 hover:border-gray-500'
                   }`}
               >
@@ -406,6 +407,10 @@ export default function FeedbackForm({ lockedWebsiteId = null, showDashboardLink
               </button>
             ))}
           </div>
+          <p className="text-xs text-gray-500 mt-1.5">
+            Selected: <span className={severityMeta(form.rating).text}>{severityMeta(form.rating).label}</span>
+            <span className="text-gray-600"> · 1 = Mild → 5 = Critical</span>
+          </p>
         </div>
 
         {/* Feedback Text */}

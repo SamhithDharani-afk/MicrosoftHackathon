@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, Play, ChevronRight, MessageSquare, AlertCircle } from 'lucide-react';
 import { walkthroughs } from '../data/mockData';
 import { fetchPainPoints, fetchFeedback } from '../utils/api';
+import { severityMeta } from '../utils/severity';
 
 export default function PainPointDetail() {
   const { id } = useParams();
@@ -199,9 +200,8 @@ export default function PainPointDetail() {
                   <span className="text-sm font-medium text-white">{fb.submitter}</span>
                   <span className="text-xs text-gray-500">({fb.role})</span>
                   {fb.department && <span className="text-xs text-gray-600">· {fb.department}</span>}
-                  <span className={`ml-auto px-2 py-0.5 rounded text-xs font-medium
-                    ${fb.rating <= 2 ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                    {fb.rating}/5
+                  <span className={`ml-auto px-2 py-0.5 rounded text-xs font-medium ${severityMeta(fb.rating).badge}`}>
+                    {fb.rating}/5 · {severityMeta(fb.rating).label}
                   </span>
                 </div>
                 <p className="text-sm text-gray-300">{fb.text}</p>
