@@ -37,3 +37,29 @@ export async function submitFeedback(payload) {
   }
   return res.json();
 }
+
+// Fetch the pre-generated "before" wireframe for a website. The server screenshots
+// the live URL and reproduces it as HTML on first use, then caches it.
+export async function fetchWireframe(websiteId, url) {
+  const params = new URLSearchParams({ websiteId });
+  if (url) params.set('url', url);
+  const res = await fetch(`/api/wireframe?${params.toString()}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || `Failed to load wireframe (${res.status})`);
+  return data; // { before, url, ready }
+}
+
+// Generate the "after" wireframe on the fly: the server applies ONLY the proposed
+// fix to the cached "before" and returns both documents.
+export async function generateAfter(payload) {
+  const res = await fetch('/api/wireframe/after', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || (!data.before && !data.after)) {
+    throw new Error(data?.error || `Failed to generate wireframe (${res.status})`);
+  }
+  return data; // { before, after }
+}

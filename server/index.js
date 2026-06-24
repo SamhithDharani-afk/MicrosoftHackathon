@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { feedbackEntries as seedFeedback, painPoints as curatedPainPoints, websites } from '../src/data/mockData.js';
 import { clusterFeedback } from '../src/data/clustering.js';
+import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, localScreenshotPath } from './wireframe-service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -25,6 +26,9 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_feedback_website ON feedback (website_id);
 `);
+
+// Wireframe cache table (before_html per website, generated from a screenshot).
+ensureWireframeTable(db);
 
 // Seed the example feedback once, so dashboards aren't empty on first run.
 const { c: existing } = db.prepare('SELECT COUNT(*) AS c FROM feedback').get();
@@ -120,6 +124,58 @@ app.get('/api/pain-points', (req, res) => {
     all.push(...clusterFeedback(rows, id, curatedPainPoints));
   }
   res.json(all);
+});
+
+// ── Wireframes ─────────────────────────────────────────────────
+// Resolve a website's live URL: explicit query/body wins, else the seed list.
+const resolveUrl = (websiteId, override) =>
+  override || websites.find((w) => w.id === websiteId)?.url || '';
+// Resolve a website's bundled screenshot asset (preferred vision source).
+const resolveImage = (websiteId) =>
+  localScreenshotPath(websites.find((w) => w.id === websiteId)?.screenshotAsset);
+
+// Return the pre-generated "before" wireframe for a website, generating + caching
+// it (screenshot -> faithful HTML) on first use.
+app.get('/api/wireframe', async (req, res) => {
+  const { websiteId, url } = req.query;
+  if (!websiteId) return res.status(400).json({ error: 'websiteId is required' });
+  const liveUrl = resolveUrl(websiteId, url);
+  // Fast path: report whether a before is already cached without generating.
+  const cached = getCachedBefore(db, websiteId);
+  if (cached) return res.json({ before: cached.before, url: cached.url || liveUrl, ready: true });
+  try {
+    const before = await getOrCreateBefore(db, {
+      websiteId,
+      url: liveUrl,
+      imagePath: resolveImage(websiteId),
+    });
+    res.json({ before, url: liveUrl, ready: true });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// Generate the "after" wireframe on the fly: load the cached before, apply ONLY
+// the proposed fix, and return both documents.
+app.post('/api/wireframe/after', async (req, res) => {
+  const b = req.body || {};
+  if (!b.websiteId || !b.fixTitle) {
+    return res.status(400).json({ error: 'websiteId and fixTitle are required' });
+  }
+  const liveUrl = resolveUrl(b.websiteId, b.url);
+  try {
+    const { before, after } = await applyFix(db, {
+      websiteId: String(b.websiteId),
+      url: liveUrl,
+      imagePath: resolveImage(b.websiteId),
+      painPointSummary: b.painPointSummary || '',
+      fixTitle: String(b.fixTitle),
+      fixDescription: b.fixDescription || '',
+    });
+    res.json({ before, after });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
 });
 
 app.listen(PORT, () => {

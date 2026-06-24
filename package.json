@@ -7,6 +7,7 @@
     "dev": "concurrently -n client,server -c blue,green \"vite\" \"node server/index.js\"",
     "dev:client": "vite",
     "server": "node server/index.js",
+    "pregen": "node server/pregen.js",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"
@@ -20,6 +21,7 @@
     "concurrently": "^10.0.3",
     "express": "^4.22.2",
     "lucide-react": "^1.21.0",
+    "playwright": "^1.61.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.0",
