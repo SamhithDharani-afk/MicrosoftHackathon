@@ -10,6 +10,15 @@ export async function fetchFeedback(websiteId) {
   return res.json();
 }
 
+export async function fetchPainPoints(websiteId) {
+  const url = websiteId
+    ? `/api/pain-points?websiteId=${encodeURIComponent(websiteId)}`
+    : '/api/pain-points';
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to load pain points (${res.status})`);
+  return res.json();
+}
+
 export async function submitFeedback(payload) {
   const res = await fetch('/api/feedback', {
     method: 'POST',

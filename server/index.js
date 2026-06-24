@@ -2,7 +2,8 @@ import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { feedbackEntries as seedFeedback } from '../src/data/mockData.js';
+import { feedbackEntries as seedFeedback, painPoints as curatedPainPoints, websites } from '../src/data/mockData.js';
+import { clusterFeedback } from '../src/data/clustering.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -99,6 +100,26 @@ app.post('/api/feedback', (req, res) => {
     createdAt
   );
   res.status(201).json(toClient(db.prepare('SELECT * FROM feedback WHERE id = ?').get(id)));
+});
+
+// Pain points — clustered live from the database, not hardcoded.
+app.get('/api/pain-points', (req, res) => {
+  const { websiteId } = req.query;
+  let ids;
+  if (websiteId) {
+    ids = [websiteId];
+  } else {
+    // Any website that has feedback, plus the seeded examples.
+    const fromDb = db.prepare('SELECT DISTINCT website_id FROM feedback').all().map((r) => r.website_id);
+    ids = [...new Set([...websites.map((w) => w.id), ...fromDb])];
+  }
+  const all = [];
+  const stmt = db.prepare('SELECT * FROM feedback WHERE website_id = ? ORDER BY created_at DESC, rowid DESC');
+  for (const id of ids) {
+    const rows = stmt.all(id).map(toClient);
+    all.push(...clusterFeedback(rows, id, curatedPainPoints));
+  }
+  res.json(all);
 });
 
 app.listen(PORT, () => {

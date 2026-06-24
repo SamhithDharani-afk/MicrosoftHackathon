@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AlertTriangle, TrendingUp, Users, MessageSquare, ChevronDown, ChevronRight, Wand2, Image, Workflow, Eye, Sparkles, Globe, GitBranch, Plus } from 'lucide-react';
-import { getPainPointsForWebsite } from '../data/mockData';
 import { useWebsites } from '../context/WebsitesContext';
-import { fetchFeedback } from '../utils/api';
+import { fetchFeedback, fetchPainPoints } from '../utils/api';
 
 function PainPointCard({ pp, onGenerate }) {
   const [expanded, setExpanded] = useState(false);
@@ -113,21 +112,27 @@ export default function ManagerDashboard() {
   const { websites, activeWebsite, activeWebsiteId, setActiveWebsite } = useWebsites();
   const [generating, setGenerating] = useState(null); // { ppId, type }
   const [feedbackEntries, setFeedbackEntries] = useState([]);
+  const [painPoints, setPainPoints] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Pull live feedback for the selected website from the database.
+  // Pull live feedback + AI-clustered pain points for the selected website.
   useEffect(() => {
     let active = true;
     setLoading(true);
-    fetchFeedback(activeWebsiteId)
-      .then((rows) => { if (active) setFeedbackEntries(rows); })
-      .catch(() => { if (active) setFeedbackEntries([]); })
+    Promise.all([fetchFeedback(activeWebsiteId), fetchPainPoints(activeWebsiteId)])
+      .then(([fb, pp]) => {
+        if (!active) return;
+        setFeedbackEntries(fb);
+        setPainPoints(pp);
+      })
+      .catch(() => {
+        if (!active) return;
+        setFeedbackEntries([]);
+        setPainPoints([]);
+      })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [activeWebsiteId]);
-
-  // Pain points remain AI-analyzed (static) per website.
-  const painPoints = getPainPointsForWebsite(activeWebsiteId);
 
   const totalFeedback = feedbackEntries.length;
   const criticalCount = painPoints.filter(p => p.severity === 'critical').length;
