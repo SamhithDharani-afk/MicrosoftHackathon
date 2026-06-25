@@ -2,15 +2,18 @@
 //   - process-flow : a before/after user-journey diagram (structured, the client
 //                     lays it out with ReactFlow)
 //   - walkthrough   : a step-by-step guide to the proposed fix
+//   - dev-prompt    : a paste-ready prompt for an AI coding assistant
 //
-// Both are latency-tolerant (the user explicitly clicks "Generate"), so they use
-// the same GitHub Models client (gpt-4o-mini) as the coalescer. Results are
-// cached in SQLite keyed by the pain point id + a hash of its text, so a given
-// pain point generates once and stays stable (no flip-flop) until its underlying
-// feedback — and therefore its title/summary/root cause — changes.
+// These are latency-tolerant (the user explicitly clicks "Generate"), so they run
+// through the SAME isolated Copilot CLI (Copilot Pro, no GitHub token needed) that
+// powers the wireframes — `runCopilotJSON` — rather than the token-gated GitHub
+// Models API. This makes every artifact genuinely contextual to the specific pain
+// point + the real user feedback behind it. Results are cached in SQLite keyed by
+// the pain point id + a hash of its text, so a given pain point generates once and
+// stays stable until its underlying feedback (and therefore its text) changes.
 
 import { createHash } from 'node:crypto';
-import { chatJSON } from './github-models.js';
+import { runCopilotJSON } from './wireframe-service.js';
 
 export function ensureSolutionTable(db) {
   db.exec(`
@@ -76,15 +79,34 @@ const clampList = (v, min, max, fallback) => {
 };
 
 // ── Process flow ──────────────────────────────────────────────────────────
-function buildFlowPrompt(pp, websiteName, refinement) {
+// Render real user feedback verbatim so the model grounds every step in what
+// users actually said (instead of emitting generic placeholder journeys).
+function quotesBlock(quotes) {
+  const list = (Array.isArray(quotes) ? quotes : [])
+    .map((q) => str(q))
+    .filter(Boolean)
+    .slice(0, 6);
+  if (!list.length) return '';
+  return (
+    `REAL USER FEEDBACK (verbatim — ground every step in what these users actually ` +
+    `experienced):\n` +
+    list.map((q) => `- "${q}"`).join('\n') +
+    `\n\n`
+  );
+}
+
+function buildFlowPrompt(pp, websiteName, refinement, quotes) {
   return (
     `You are designing a BEFORE/AFTER user-journey diagram that contrasts the ` +
-    `current broken experience with a proposed fix for a product pain point on ` +
-    `"${websiteName || 'the product'}".\n\n` +
+    `current broken experience with a specific, concrete proposed fix for a product ` +
+    `pain point on "${websiteName || 'the product'}".\n\n` +
     `PAIN POINT:\n` +
     `- Title: ${pp.title || ''}\n` +
     `- Summary: ${pp.summary || ''}\n` +
-    `- Root cause: ${pp.rootCause || ''}\n\n` +
+    `- Root cause: ${pp.rootCause || ''}\n` +
+    (pp.severity ? `- Severity: ${pp.severity}\n` : '') +
+    `\n` +
+    quotesBlock(quotes) +
     refineBlock(refinement) +
     `Return ONLY a JSON object describing the journey:\n` +
     `{\n` +
@@ -97,9 +119,13 @@ function buildFlowPrompt(pp, websiteName, refinement) {
     `  "newSteps": ["<step>", "<step>"],\n` +
     `  "outcome": "<the positive end result, may include a metric>"\n` +
     `}\n\n` +
-    `Rules: oldSteps and newSteps each have 2-4 short imperative steps (<=8 words ` +
-    `each). The last oldStep should convey user frustration; the last newStep the ` +
-    `quick success. Keep it specific to THIS pain point. Output JSON only.`
+    `Rules: Make every step SPECIFIC to THIS product and pain point — name the actual ` +
+    `UI elements, screens, clicks and emotions implied by the feedback above. NEVER ` +
+    `use generic filler like "User hits the issue", "Gives up frustrated", "User ` +
+    `finds the fix" or "Task done quickly". oldSteps and newSteps each have 3-4 short ` +
+    `imperative steps (<=9 words each). The last oldStep conveys the specific ` +
+    `frustration users described; the last newStep the specific quick success. The ` +
+    `outcome should include a plausible concrete metric. Output JSON only.`
   );
 }
 
@@ -116,7 +142,7 @@ function normalizeFlow(out, pp) {
   };
 }
 
-export async function generateProcessFlow(db, { painPoint, websiteName, refinement }) {
+export async function generateProcessFlow(db, { painPoint, websiteName, refinement, quotes }) {
   const hash = painPointHash(painPoint);
   // A refinement is an explicit "this was wrong, try again" — always regenerate,
   // then overwrite the cache so the corrected version persists on later visits.
@@ -125,29 +151,22 @@ export async function generateProcessFlow(db, { painPoint, websiteName, refineme
     if (cached) return cached;
   }
 
-  // Use the model when a token is available; otherwise fall back to the
-  // deterministic local builder so the feature works without GitHub Models.
+  // Generate through the isolated Copilot CLI (no token). On any failure, fall
+  // back to the deterministic builder so the feature still works — but do NOT
+  // cache that generic fallback, so a later click can retry a real generation.
   let out = null;
   try {
-    out = await chatJSON({
-      system:
-        'You are a precise UX flow designer. You always return strict JSON matching ' +
-        'the requested schema and never add commentary.',
-      user: buildFlowPrompt(painPoint, websiteName, refinement),
-      temperature: 0.3,
-      maxTokens: 900,
-      timeoutMs: 30000,
-    });
+    out = await runCopilotJSON(buildFlowPrompt(painPoint, websiteName, refinement, quotes));
   } catch {
     out = null;
   }
   const flow = normalizeFlow(out, painPoint);
-  putCache(db, painPoint.id, 'process-flow', hash, flow);
+  if (out) putCache(db, painPoint.id, 'process-flow', hash, flow);
   return flow;
 }
 
 // ── Walkthrough ───────────────────────────────────────────────────────────
-function buildWalkthroughPrompt(pp, websiteName, refinement) {
+function buildWalkthroughPrompt(pp, websiteName, refinement, quotes) {
   return (
     `You are writing a short, friendly step-by-step walkthrough that guides a user ` +
     `through the PROPOSED FIX for a product pain point on ` +
@@ -156,13 +175,15 @@ function buildWalkthroughPrompt(pp, websiteName, refinement) {
     `- Title: ${pp.title || ''}\n` +
     `- Summary: ${pp.summary || ''}\n` +
     `- Root cause: ${pp.rootCause || ''}\n\n` +
+    quotesBlock(quotes) +
     refineBlock(refinement) +
     `Return ONLY a JSON object:\n` +
     `{ "title": "<walkthrough title>",\n` +
     `  "steps": [ { "title": "<step title>", "description": "<1-2 sentence ` +
     `instruction describing what the user sees/does with the new design>" } ] }\n\n` +
     `Rules: 3-5 steps. Describe the IMPROVED experience (the fix in action), not ` +
-    `the old broken one. Keep it concrete and specific to this pain point. Output ` +
+    `the old broken one. Reference the actual UI elements and tasks implied by the ` +
+    `feedback above. Keep it concrete and specific to this pain point. Output ` +
     `JSON only.`
   );
 }
@@ -181,7 +202,7 @@ function normalizeWalkthrough(out, pp) {
   return { title: str(out?.title, `${pp.title || 'Solution'} Walkthrough`), steps };
 }
 
-export async function generateWalkthrough(db, { painPoint, websiteName, refinement }) {
+export async function generateWalkthrough(db, { painPoint, websiteName, refinement, quotes }) {
   const hash = painPointHash(painPoint);
   if (!refinement) {
     const cached = getCached(db, painPoint.id, 'walkthrough', hash);
@@ -190,20 +211,12 @@ export async function generateWalkthrough(db, { painPoint, websiteName, refineme
 
   let out = null;
   try {
-    out = await chatJSON({
-      system:
-        'You are a clear technical writer. You always return strict JSON matching the ' +
-        'requested schema and never add commentary.',
-      user: buildWalkthroughPrompt(painPoint, websiteName, refinement),
-      temperature: 0.3,
-      maxTokens: 900,
-      timeoutMs: 30000,
-    });
+    out = await runCopilotJSON(buildWalkthroughPrompt(painPoint, websiteName, refinement, quotes));
   } catch {
     out = null;
   }
   const walkthrough = normalizeWalkthrough(out, painPoint);
-  putCache(db, painPoint.id, 'walkthrough', hash, walkthrough);
+  if (out) putCache(db, painPoint.id, 'walkthrough', hash, walkthrough);
   return walkthrough;
 }
 
@@ -246,18 +259,10 @@ export async function generateDevPrompt(db, { painPoint, websiteName, url, refin
 
   let out = null;
   try {
-    out = await chatJSON({
-      system:
-        'You are a senior engineer who writes precise, actionable prompts for AI ' +
-        'coding assistants. You always return strict JSON matching the requested ' +
-        'schema and never add commentary.',
-      user:
-        buildDevPromptPrompt(painPoint, websiteName, url) +
-        (refinement ? `\n\n${refineBlock(refinement)}` : ''),
-      temperature: 0.3,
-      maxTokens: 1200,
-      timeoutMs: 30000,
-    });
+    out = await runCopilotJSON(
+      buildDevPromptPrompt(painPoint, websiteName, url) +
+        (refinement ? `\n\n${refineBlock(refinement)}` : '')
+    );
   } catch {
     out = null;
   }
@@ -269,6 +274,6 @@ export async function generateDevPrompt(db, { painPoint, websiteName, url, refin
     `Find the relevant component(s), make the change following the existing design ` +
     `system, ensure it is accessible and responsive, and add/update tests.`;
   const result = { prompt: str(out?.prompt, fallback) };
-  putCache(db, painPoint.id, 'dev-prompt', hash, result);
+  if (out) putCache(db, painPoint.id, 'dev-prompt', hash, result);
   return result;
 }

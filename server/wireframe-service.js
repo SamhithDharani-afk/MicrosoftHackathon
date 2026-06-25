@@ -202,6 +202,34 @@ function runCopilot(prompt, attachment) {
   return run;
 }
 
+// Strip ```json … ``` fences and isolate the first balanced { … } object, then
+// parse it. Returns the parsed object or null when nothing parseable is found.
+function parseJsonLoose(raw) {
+  let s = String(raw || '').trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+  const start = s.indexOf('{');
+  const end = s.lastIndexOf('}');
+  if (start === -1 || end <= start) return null;
+  try {
+    return JSON.parse(s.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+}
+
+// Run one isolated Copilot CLI call and parse its answer as JSON. This lets the
+// solution-service generate process flows / walkthroughs / dev prompts through
+// the SAME token-free Copilot Pro path the wireframes use (instead of the
+// token-gated GitHub Models API), so the artifacts are genuinely contextual.
+// Throws when the CLI fails or returns no parseable JSON so callers can fall back.
+export async function runCopilotJSON(prompt) {
+  const stdout = await runCopilot(prompt);
+  const obj = parseJsonLoose(extractAnswer(stdout));
+  if (!obj) throw new Error('Copilot returned no parseable JSON.');
+  return obj;
+}
+
 // ── SQLite cache ───────────────────────────────────────────────
 export function ensureWireframeTable(db) {
   db.exec(`

@@ -285,6 +285,21 @@ app.post('/api/wireframe/after', async (req, res) => {
   }
 });
 
+// Pull the verbatim text of the feedback behind a pain point, so the solution
+// generators can ground their output in what users actually said (more contextual
+// flows/walkthroughs than title/summary alone). Best-effort: returns [] on any error.
+function feedbackQuotes(painPoint, limit = 6) {
+  const ids = Array.isArray(painPoint?.relatedFeedback) ? painPoint.relatedFeedback : [];
+  if (!ids.length) return [];
+  try {
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = db.prepare(`SELECT text FROM feedback WHERE id IN (${placeholders})`).all(...ids);
+    return rows.map((r) => String(r.text || '').trim()).filter(Boolean).slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 // ── AI-generated solution artifacts (per pain point) ───────────────────────
 // Both endpoints take the pain point itself so they work for ANY pain point —
 // curated or AI-clustered — not just the bundled demo solutions. Results are
@@ -293,7 +308,12 @@ app.post('/api/process-flow', async (req, res) => {
   const { painPoint, websiteName, refinement } = req.body || {};
   if (!painPoint?.id) return res.status(400).json({ error: 'painPoint is required' });
   try {
-    const flow = await generateProcessFlow(db, { painPoint, websiteName, refinement });
+    const flow = await generateProcessFlow(db, {
+      painPoint,
+      websiteName,
+      refinement,
+      quotes: feedbackQuotes(painPoint),
+    });
     res.json({ flow });
   } catch (e) {
     res.status(502).json({ error: String(e?.message || e) });
@@ -304,7 +324,12 @@ app.post('/api/walkthrough', async (req, res) => {
   const { painPoint, websiteName, refinement } = req.body || {};
   if (!painPoint?.id) return res.status(400).json({ error: 'painPoint is required' });
   try {
-    const walkthrough = await generateWalkthrough(db, { painPoint, websiteName, refinement });
+    const walkthrough = await generateWalkthrough(db, {
+      painPoint,
+      websiteName,
+      refinement,
+      quotes: feedbackQuotes(painPoint),
+    });
     res.json({ walkthrough });
   } catch (e) {
     res.status(502).json({ error: String(e?.message || e) });
