@@ -321,15 +321,14 @@ function GeneratedFrame({ html, kind, url }) {
   const showIdxRef = useRef(0);
   const [fitWidth, setFitWidth] = useState(true);
   const [autoScale, setAutoScale] = useState(1);
-  const [focusScale, setFocusScale] = useState(null);
+  const [focused, setFocused] = useState(false);
+  const [focusTransform, setFocusTransform] = useState('none');
   const [focusTick, setFocusTick] = useState(0);
   const [changeCount, setChangeCount] = useState(0);
 
-  // Effective zoom: a manual "focus" zoom (set when jumping to a change) wins,
-  // otherwise fit-to-width (zoom out) or actual size.
-  const scale = focusScale != null ? focusScale : fitWidth ? autoScale : 1;
-  const scaleRef = useRef(scale);
-  scaleRef.current = scale;
+  // The zoom applied to the iframe itself. When focused on a change we always render
+  // from the fit-to-width base and add an extra in-place zoom transform on top.
+  const baseScale = focused ? autoScale : fitWidth ? autoScale : 1;
 
   // Track the fit-to-width ratio as the column resizes.
   useEffect(() => {
@@ -369,36 +368,47 @@ function GeneratedFrame({ html, kind, url }) {
     setChangeCount(readChanges().length);
   }, [isAfter, readChanges]);
 
-  // "View change": zoom in on the next change and center its arrow. We bump the zoom
-  // (focusScale) and a tick; a layout effect then scrolls once the new scale is live.
-  const viewNextChange = useCallback(() => {
-    const els = readChanges();
-    if (!els.length) return;
-    const idx = changeIdxRef.current % els.length;
-    showIdxRef.current = idx;
-    changeIdxRef.current = idx + 1;
-    setFitWidth(false);
-    setFocusScale(1.6);
-    setFocusTick((t) => t + 1);
-  }, [readChanges]);
+  const resetZoom = useCallback(() => {
+    setFocused(false);
+    setFocusTransform('none');
+    setFitWidth(true);
+  }, []);
 
-  // After the focus zoom is applied, scroll the zoomed frame so the change is
-  // centered, then flash it. Runs whenever a "View change" click bumps focusTick.
-  useEffect(() => {
-    if (!focusTick) return;
+  // "View change": zoom IN PLACE on the next change — no scrolling. We compute a
+  // transform that scales the fit-width frame up and re-centers it on the change's
+  // arrow, clipped to the same viewport, then flash the change.
+  const viewNextChange = useCallback(() => {
     const els = readChanges();
     const wrap = wrapRef.current;
     if (!els.length || !wrap) return;
-    const el = els[showIdxRef.current % els.length];
-    const r = el.getBoundingClientRect();
-    const s = scaleRef.current;
-    const centerX = (r.left + r.width / 2) * s;
-    const centerY = (r.top + r.height / 2) * s;
-    wrap.scrollTo({
-      left: Math.max(0, centerX - wrap.clientWidth / 2),
-      top: Math.max(0, centerY - wrap.clientHeight / 2 + 90 * s),
-      behavior: 'smooth',
-    });
+    const idx = changeIdxRef.current % els.length;
+    showIdxRef.current = idx;
+    changeIdxRef.current = idx + 1;
+
+    const el = els[idx];
+    const r = el.getBoundingClientRect(); // design-space coords (iframe not scrolled)
+    const b = autoScale; // fit-to-width base the zoom is layered on top of
+    const W = wrap.clientWidth;
+    const H = wrap.clientHeight;
+    const Z = 2.4; // how far to zoom into the change
+    // Center of the change (incl. some room below for its arrow) in fit-width px.
+    const px = (r.left + r.width / 2) * b;
+    const py = (r.top + r.height / 2 + 40) * b;
+    const tx = W / 2 - Z * px;
+    const ty = H / 2 - Z * py;
+
+    setFitWidth(true);
+    setFocused(true);
+    setFocusTransform(`translate(${tx}px, ${ty}px) scale(${Z})`);
+    setFocusTick((t) => t + 1);
+  }, [readChanges, autoScale]);
+
+  // Flash the focused change each time "View change" is clicked.
+  useEffect(() => {
+    if (!focusTick) return;
+    const els = readChanges();
+    const el = els[showIdxRef.current % (els.length || 1)];
+    if (!el) return;
     try {
       el.animate(
         [
@@ -428,18 +438,31 @@ function GeneratedFrame({ html, kind, url }) {
         <button
           type="button"
           onClick={() => {
-            setFocusScale(null);
+            setFocused(false);
+            setFocusTransform('none');
             setFitWidth((f) => !f);
           }}
           title={fitWidth ? 'Switch to actual size (scroll around)' : 'Fit to width (zoom out)'}
           className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-gray-300 hover:text-white hover:bg-gray-700 transition-colors flex-shrink-0"
         >
-          {fitWidth && focusScale == null ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
-          {fitWidth && focusScale == null ? 'Actual size' : 'Fit width'}
+          {fitWidth && !focused ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+          {fitWidth && !focused ? 'Actual size' : 'Fit width'}
         </button>
       </div>
-      <div ref={wrapRef} className="overflow-auto bg-white" style={{ height: 460 }}>
-        <div style={{ width: DESIGN_W * scale, height: DESIGN_H * scale }}>
+      <div
+        ref={wrapRef}
+        className={`${focused ? 'overflow-hidden' : 'overflow-auto'} bg-white`}
+        style={{ height: 460 }}
+      >
+        <div
+          style={{
+            width: DESIGN_W * baseScale,
+            height: DESIGN_H * baseScale,
+            transform: focused ? focusTransform : 'none',
+            transformOrigin: '0 0',
+            transition: 'transform .45s cubic-bezier(.4,0,.2,1)',
+          }}
+        >
           <iframe
             title={`${kind} wireframe`}
             ref={iframeRef}
@@ -450,7 +473,7 @@ function GeneratedFrame({ html, kind, url }) {
               width: DESIGN_W,
               height: DESIGN_H,
               border: 0,
-              transform: `scale(${scale})`,
+              transform: `scale(${baseScale})`,
               transformOrigin: 'top left',
             }}
           />
@@ -469,18 +492,15 @@ function GeneratedFrame({ html, kind, url }) {
         <div className="bg-gray-900 px-4 py-2.5 border-t border-gray-700 flex items-center justify-between gap-3">
           <span className="text-xs text-gray-400">
             {changeCount === 1 ? '1 change in this design' : `${changeCount} changes in this design`}
-            {changeCount > 1 && focusTick > 0 && (
+            {changeCount > 1 && focused && (
               <span className="text-gray-500"> · showing {((showIdxRef.current % changeCount) + 1)}/{changeCount}</span>
             )}
           </span>
           <div className="flex items-center gap-2">
-            {focusScale != null && (
+            {focused && (
               <button
                 type="button"
-                onClick={() => {
-                  setFocusScale(null);
-                  setFitWidth(true);
-                }}
+                onClick={resetZoom}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs font-medium transition-colors"
               >
                 <Minimize2 className="w-3.5 h-3.5" />
@@ -493,7 +513,7 @@ function GeneratedFrame({ html, kind, url }) {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-500 text-white text-xs font-medium transition-colors"
             >
               <Locate className="w-3.5 h-3.5" />
-              {changeCount > 1 ? (focusTick > 0 ? 'Next change' : 'View changes') : 'View change'}
+              {changeCount > 1 ? (focused ? 'Next change' : 'View changes') : 'View change'}
             </button>
           </div>
         </div>
