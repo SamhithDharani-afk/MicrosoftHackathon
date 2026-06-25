@@ -109,6 +109,7 @@ export async function fetchScreenshot(websiteId, url) {
 
 // Generate a paste-ready prompt an engineer can drop into Copilot / Claude /
 // Cursor to implement the fix. Pass `refinement` to regenerate with a correction.
+// Used by DevPromptButton (takes a full painPoint object).
 export async function generateDevPrompt(painPoint, websiteName, url, refinement) {
   const res = await fetch('/api/dev-prompt', {
     method: 'POST',
@@ -120,6 +121,38 @@ export async function generateDevPrompt(painPoint, websiteName, url, refinement)
     throw new Error(data?.error || `Failed to generate dev prompt (${res.status})`);
   }
   return data.prompt;
+}
+
+// Ask the backend (isolated Copilot CLI) to refine a developer-ready prompt for
+// the proposed wireframe/flow change. Used by AIPromptPanel (takes a flat context
+// object with kind, websiteName, url, painPointSummary, fixTitle, fixDescription).
+export async function generateWireframeDevPrompt(payload) {
+  const res = await fetch('/api/dev-prompt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.prompt) {
+    throw new Error(data?.error || `Failed to generate prompt (${res.status})`);
+  }
+  return data; // { prompt }
+}
+
+// Generate a simulated-usage GIF for the proposed change: the server applies the
+// fix, then renders a fake cursor finding and "using" each change frame by frame,
+// returning an animated GIF as a data URL that embeds as a plain <img>.
+export async function generateWalkthroughVideo(payload) {
+  const res = await fetch('/api/walkthrough-video', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.gif) {
+    throw new Error(data?.error || `Failed to generate simulation (${res.status})`);
+  }
+  return data; // { gif, changeCount, after }
 }
 
 // Generate a before/after process-flow diagram for a pain point. The server
@@ -138,7 +171,7 @@ export async function generateProcessFlow(painPoint, websiteName, refinement) {
   return data.flow;
 }
 
-// Generate a step-by-step walkthrough of the proposed fix for a pain point.
+// Generate a step-by-step text walkthrough of the proposed fix for a pain point.
 // Pass `refinement` to regenerate with a correction note.
 export async function generateWalkthrough(painPoint, websiteName, refinement) {
   const res = await fetch('/api/walkthrough', {
@@ -151,4 +184,20 @@ export async function generateWalkthrough(painPoint, websiteName, refinement) {
     throw new Error(data?.error || `Failed to generate walkthrough (${res.status})`);
   }
   return data.walkthrough;
+}
+
+// Generate a Playwright-screenshot slideshow walkthrough for the proposed change:
+// the server applies the fix, captures the redesigned wireframe as slides, and
+// returns an ordered set of captioned PNG slides. Used by WalkthroughSlideshow.
+export async function generateSlideshowWalkthrough(payload) {
+  const res = await fetch('/api/walkthrough/slideshow', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !Array.isArray(data.slides) || data.slides.length === 0) {
+    throw new Error(data?.error || `Failed to generate walkthrough (${res.status})`);
+  }
+  return data; // { slides, after }
 }

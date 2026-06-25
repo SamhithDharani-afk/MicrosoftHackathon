@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { feedbackEntries as seedFeedback, painPoints as curatedPainPoints, websites } from '../src/data/mockData.js';
-import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath } from './wireframe-service.js';
+import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath, generateWalkthrough as generateSlideshowWalkthrough, generateDevPrompt as generateWireframeDevPrompt, generateWalkthroughVideo } from './wireframe-service.js';
 import { assistFeedback } from './assist-service.js';
 import { hasToken } from './github-models.js';
 import {
@@ -288,6 +288,55 @@ app.post('/api/wireframe/after', async (req, res) => {
   }
 });
 
+// Generate a slideshow walkthrough: apply the fix, then Playwright-screenshot the
+// resulting AFTER design into an ordered set of captioned slides (overview + a
+// find-it / use-it pair per change).
+app.post('/api/walkthrough/slideshow', async (req, res) => {
+  const b = req.body || {};
+  if (!b.websiteId || !b.fixTitle) {
+    return res.status(400).json({ error: 'websiteId and fixTitle are required' });
+  }
+  const liveUrl = resolveUrl(b.websiteId, b.url);
+  try {
+    const { slides, after } = await generateSlideshowWalkthrough(db, {
+      websiteId: String(b.websiteId),
+      url: liveUrl,
+      imagePath: resolveImage(b.websiteId),
+      websiteName: websites.find((w) => w.id === b.websiteId)?.name || '',
+      painPointSummary: b.painPointSummary || '',
+      fixTitle: String(b.fixTitle),
+      fixDescription: b.fixDescription || '',
+    });
+    res.json({ slides, after });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// Generate a simulated-usage GIF: apply the fix, then render a fake cursor finding
+// and "using" each change frame by frame, returned as an animated GIF data URL.
+app.post('/api/walkthrough-video', async (req, res) => {
+  const b = req.body || {};
+  if (!b.websiteId || !b.fixTitle) {
+    return res.status(400).json({ error: 'websiteId and fixTitle are required' });
+  }
+  const liveUrl = resolveUrl(b.websiteId, b.url);
+  try {
+    const { gif, changeCount, after } = await generateWalkthroughVideo(db, {
+      websiteId: String(b.websiteId),
+      url: liveUrl,
+      imagePath: resolveImage(b.websiteId),
+      websiteName: websites.find((w) => w.id === b.websiteId)?.name || '',
+      painPointSummary: b.painPointSummary || '',
+      fixTitle: String(b.fixTitle),
+      fixDescription: b.fixDescription || '',
+    });
+    res.json({ gif, changeCount, after });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // ── AI-generated solution artifacts (per pain point) ───────────────────────
 // Both endpoints take the pain point itself so they work for ANY pain point —
 // curated or AI-clustered — not just the bundled demo solutions. Results are
@@ -296,8 +345,6 @@ app.post('/api/process-flow', async (req, res) => {
   const { painPoint, websiteName, refinement } = req.body || {};
   if (!painPoint?.id) return res.status(400).json({ error: 'painPoint is required' });
   if (!hasToken()) return res.status(503).json({ error: 'AI unavailable: set GITHUB_TOKEN on the server.' });
-  try {
-    const flow = await generateProcessFlow(db, { painPoint, websiteName, refinement });
     res.json({ flow });
   } catch (e) {
     res.status(502).json({ error: String(e?.message || e) });
@@ -317,19 +364,40 @@ app.post('/api/walkthrough', async (req, res) => {
 });
 
 // Generate a paste-ready prompt an engineer can drop into Copilot / Claude /
-// Cursor to implement the fix in their own codebase. Cached per pain point;
-// `refinement` regenerates with a correction note.
+// Cursor to implement the fix in their own codebase. Supports two calling modes:
+// - { painPoint } (from DevPromptButton): uses GitHub Models via solution-service.
+// - { fixTitle, fixDescription, ... } (from AIPromptPanel): uses Copilot CLI via
+//   wireframe-service for richer, wireframe-context-aware refinement.
 app.post('/api/dev-prompt', async (req, res) => {
-  const { painPoint, websiteName, url, refinement } = req.body || {};
-  if (!painPoint?.id) return res.status(400).json({ error: 'painPoint is required' });
-  if (!hasToken()) return res.status(503).json({ error: 'AI unavailable: set GITHUB_TOKEN on the server.' });
-  try {
-    const result = await generateDevPrompt(db, { painPoint, websiteName, url, refinement });
-    res.json(result);
-  } catch (e) {
-    res.status(502).json({ error: String(e?.message || e) });
+  const b = req.body || {};
+  if (b.painPoint?.id) {
+    // Pain-point path: solution-service (GitHub Models, cached).
+    if (!hasToken()) return res.status(503).json({ error: 'AI unavailable: set GITHUB_TOKEN on the server.' });
+    try {
+      const result = await generateDevPrompt(db, { painPoint: b.painPoint, websiteName: b.websiteName, url: b.url, refinement: b.refinement });
+      res.json(result);
+    } catch (e) {
+      res.status(502).json({ error: String(e?.message || e) });
+    }
+  } else {
+    // Wireframe/flow context path: wireframe-service (Copilot CLI).
+    if (!b.fixTitle && !b.fixDescription) {
+      return res.status(400).json({ error: 'fixTitle or fixDescription is required' });
+    }
+    try {
+      const prompt = await generateWireframeDevPrompt({
+        kind: b.kind || 'wireframe',
+        websiteName: b.websiteName || '',
+        url: b.url || '',
+        painPointSummary: b.painPointSummary || '',
+        fixTitle: b.fixTitle || '',
+        fixDescription: b.fixDescription || '',
+      });
+      res.json({ prompt });
+    } catch (e) {
+      res.status(502).json({ error: e.message });
+    }
   }
-});
 
 app.listen(PORT, () => {
   console.log(`[api] feedback server listening on http://localhost:${PORT}`);

@@ -53,11 +53,14 @@ export function buildAfterPrompt({ beforeHtml, painPointSummary, fixTitle, fixDe
     `User feedback / pain point: '${painPointSummary || 'N/A'}'.\n` +
     `Apply ONLY this change to the page: '${fixTitle} — ${fixDescription}'.\n\n` +
     refineBlock +
-    `CRITICAL — TAG THE CHANGE (do this every time):\n` +
-    `On the single HTML element you add or modify to implement the fix, add the ` +
-    `attribute data-ff-new="true". Add it to exactly ONE element and to no other ` +
-    `element. Example: <button data-ff-new="true" class="...">Settings</button>. ` +
-    `This attribute renders nothing visible by itself — it is a hook used later to ` +
+    `CRITICAL — TAG EVERY CHANGE (do this every time):\n` +
+    `On EACH HTML element you add or modify to implement the fix, add the attribute ` +
+    `data-ff-new="true". Tag the actual leaf control (e.g. the button or icon), NOT a ` +
+    `surrounding container, row, or wrapper. If the fix has multiple parts, tag the ` +
+    `one leaf element for each part (so there may be several tagged elements); if it ` +
+    `is a single change, tag exactly one. Do not tag unrelated, unchanged elements. ` +
+    `Example: <button data-ff-new="true" class="...">+ New post</button>. This ` +
+    `attribute renders nothing visible by itself — it is a hook used later to `
     `highlight the change — so it does NOT count as a visible label. Omitting it is a ` +
     `failure.\n\n` +
     `RULES (follow exactly):\n` +
@@ -72,6 +75,80 @@ export function buildAfterPrompt({ beforeHtml, painPointSummary, fixTitle, fixDe
     `Output ONLY the full modified HTML document. ` +
     `No explanation, no markdown fences, no commentary before or after it.`
   );
+}
+
+// Prompt that asks the model to write a developer-ready prompt for an EXTERNAL AI
+// coding assistant. The output is the prompt text itself (ready to copy/paste),
+// tailored to the specific change.
+export function buildDevPromptRequest({ kind, websiteName, url, painPointSummary, fixTitle, fixDescription }) {
+  const kindLabel = kind === 'process-flow' ? 'user-flow / process redesign' : 'UI wireframe change';
+  return (
+    `Write a single, detailed, copy-paste-ready prompt that a developer will paste ` +
+    `into an external AI coding assistant (such as GitHub Copilot or ChatGPT) to ` +
+    `implement the following ${kindLabel} in their own front-end codebase.\n\n` +
+    `Product / page: ${websiteName || 'a web application'}${url ? ` (${url})` : ''}\n` +
+    `User pain point: ${painPointSummary || 'N/A'}\n` +
+    `Proposed change: ${fixTitle || 'N/A'}\n` +
+    `Details: ${fixDescription || 'N/A'}\n\n` +
+    `The prompt you write MUST:\n` +
+    `- Be addressed to the coding assistant (second person), not to me.\n` +
+    `- Open with concise context, then explicit requirements (keep the existing ` +
+    `design language; accessibility — keyboard, ARIA labels, contrast, focus; no ` +
+    `regressions; follow repo conventions and reuse existing components).\n` +
+    `- State the deliverables: concrete code changes with file paths, a short ` +
+    `explanation of where the change goes, and any new props/routes/state.\n` +
+    `- Be specific to THIS change, well-structured, and usable verbatim.\n\n` +
+    `Output ONLY the prompt text. No preamble, no surrounding quotes, no markdown ` +
+    `code fences, and nothing addressed to me.`
+  );
+}
+
+// Prompt that narrates a click-by-click walkthrough of the change(s) detected in
+// the generated AFTER design. The model is told exactly which controls changed and
+// where they sit, and must return STRICT JSON (no prose) with a caption per slide,
+// so the steps are specific and non-trivial rather than "click the button".
+export function buildWalkthroughStepsPrompt({ websiteName, painPointSummary, fixTitle, fixDescription, changes }) {
+  const list = (changes || [])
+    .map((c, i) => `  ${i + 1}. the ${c.label} in the ${c.region}`)
+    .join('\n');
+  return (
+    `You are writing the narration for a short, click-by-click product walkthrough ` +
+    `that teaches a user how to discover and use a NEW UI change. Return STRICT JSON ` +
+    `ONLY — no prose, no markdown fences, nothing before or after the object.\n\n` +
+    `Product: ${websiteName || 'the app'}\n` +
+    `User pain point being solved: ${painPointSummary || 'N/A'}\n` +
+    `The change that was made: ${fixTitle || 'N/A'} — ${fixDescription || ''}\n\n` +
+    `The walkthrough is an overview slide, then for EACH change below a "find it" ` +
+    `slide and a "use it" slide, in this exact order:\n${list || '  (no changes detected)'}\n\n` +
+    `Write captions that are SPECIFIC and NON-TRIVIAL. For each change:\n` +
+    `- "find it": say what the control is for, where it now appears on screen, and ` +
+    `why that placement fixes the pain point (what users no longer have to do).\n` +
+    `- "use it": describe the exact action the user takes and what happens next ` +
+    `(the result/benefit). Mention real specifics, not filler.\n` +
+    `Never write generic filler like "Use the button" or "Find the icon". ` +
+    `Each caption is 1-2 full sentences. Titles are <= 6 words and start with "Step N:".\n\n` +
+    `Output JSON with EXACTLY this shape:\n` +
+    `{"overviewTitle": string, "overviewCaption": string, "steps": ` +
+    `[{"findTitle": string, "findCaption": string, "useTitle": string, "useCaption": string}]}\n` +
+    `The "steps" array MUST have exactly ${(changes || []).length} item(s), one per ` +
+    `change above, in the same order. Output ONLY the JSON object.`
+  );
+}
+
+// Parse the walkthrough narration JSON, tolerating code fences or stray text around
+// the object. Returns the parsed object, or null if it cannot be parsed.
+export function parseStepsJson(raw) {
+  let t = String(raw || '').trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) t = fence[1].trim();
+  const start = t.indexOf('{');
+  const end = t.lastIndexOf('}');
+  if (start >= 0 && end > start) t = t.slice(start, end + 1);
+  try {
+    return JSON.parse(t);
+  } catch {
+    return null;
+  }
 }
 
 // JSON object per line; the answer is the last assistant message's text content,

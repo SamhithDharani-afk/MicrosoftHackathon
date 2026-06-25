@@ -352,8 +352,8 @@ export const painPoints = [
 // ──────────────────────────────────────────────────────────────
 export const wireframes = {
   'sol-001': {
-    title: 'Add Persistent Gear Icon to Top Navigation',
-    description: 'Proposed UI change: Add a visible ⚙️ settings gear icon in the top-right navigation bar of Viva Engage, next to the notification bell and profile avatar.',
+    title: 'Add Settings Gear + “New Post” Button',
+    description: 'Proposed UI change — make TWO changes: (1) Add a visible ⚙️ settings gear icon in the top-right navigation bar of Viva Engage, next to the notification bell and profile avatar; and (2) Add a prominent red “+ New post” button at the top of the main feed content area.',
     before: {
       label: 'Current Design (Settings Hidden)',
       elements: [

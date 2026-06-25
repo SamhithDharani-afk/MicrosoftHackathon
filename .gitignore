@@ -26,3 +26,4 @@ server/*.db-journal
 *.njsproj
 *.sln
 *.sw?
+dist/

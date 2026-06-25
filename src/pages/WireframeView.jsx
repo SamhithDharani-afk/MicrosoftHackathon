@@ -7,6 +7,7 @@ import { fetchWireframe, generateAfter, fetchScreenshot, fetchPainPoints } from 
 import { useWebsites } from '../context/WebsitesContext';
 import RefineBox from '../components/RefineBox';
 import DevPromptButton from '../components/DevPromptButton';
+import AIPromptPanel from '../components/AIPromptPanel';
 
 function WireframePanel({ type, data, showCallouts = false }) {
   const isAfter = type === 'after';
@@ -295,6 +296,9 @@ const CHANGE_MARKER_STYLE =
   'font:800 15px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.1em;' +
   'animation:ffBob 1.4s ease-in-out infinite;' +
   'z-index:2147483647;pointer-events:none;white-space:nowrap;}' +
+  '@media(prefers-reduced-motion:reduce){' +
+  '[data-ff-new]{animation:none !important;}' +
+  '[data-ff-new]::after,[data-ff-new]::before{animation:none;}}' +
   '</style>';
 
 // Insert the marker CSS into a generated document (before </head>, else after <body>,
@@ -1061,6 +1065,18 @@ export default function WireframeView() {
           </div>
         </div>
       )}
+
+      {/* Embedded AI prompt helper — turn this change into a copy-paste dev prompt */}
+      <AIPromptPanel
+        context={{
+          kind: 'wireframe',
+          websiteName: ctx.websiteName,
+          url: ctx.url,
+          painPointSummary: ctx.painPointSummary,
+          title: ctx.title,
+          description: ctx.description,
+        }}
+      />
     </div>
   );
 }
