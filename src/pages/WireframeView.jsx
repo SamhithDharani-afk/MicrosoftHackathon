@@ -266,27 +266,31 @@ function neutralizeLinks(rawHtml) {
 }
 
 // CSS injected INTO the generated "after" document so the changed element — tagged
-// by the model with data-ff-new="true" — is highlighted cleanly. A thin red outline
-// + gentle glow marks the element, and a slim red arrow (drawn with clip-path) sits
-// below it pointing straight up, with a small balanced "NEW" tag beneath the arrow.
-// Placing it below (arrow up) keeps the marker visible even for top-bar changes. It
-// lives inside the iframe so it sits exactly on the change and scales with the page.
+// by the model with data-ff-new="true" — is highlighted prominently. A red outline +
+// pulsing glow marks the element, and a large red arrow (drawn with clip-path) sits
+// below it pointing straight up, gently bobbing toward the change, with a bold "NEW"
+// badge beneath the arrow that bobs in sync. Placing it below (arrow up) keeps the
+// marker visible even for top-bar changes. It lives inside the iframe so it sits
+// exactly on the change and scales with the page.
 const CHANGE_MARKER_STYLE =
   '<style id="ff-change-markers">' +
-  '@keyframes ffPulse{0%,100%{box-shadow:0 0 0 3px rgba(239,68,68,.15)}' +
-  '50%{box-shadow:0 0 0 7px rgba(239,68,68,.22)}}' +
-  '[data-ff-new]{position:relative !important;outline:2px solid #ef4444 !important;' +
-  'outline-offset:2px !important;border-radius:5px !important;' +
-  'animation:ffPulse 1.8s ease-in-out infinite !important;}' +
+  '@keyframes ffPulse{0%,100%{box-shadow:0 0 0 4px rgba(239,68,68,.18)}' +
+  '50%{box-shadow:0 0 0 11px rgba(239,68,68,.28)}}' +
+  '@keyframes ffBob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,6px)}}' +
+  '[data-ff-new]{position:relative !important;outline:3px solid #ef4444 !important;' +
+  'outline-offset:3px !important;border-radius:6px !important;' +
+  'animation:ffPulse 1.6s ease-in-out infinite !important;}' +
   '[data-ff-new]::after{content:"";position:absolute;top:calc(100% + 6px);' +
-  'left:50%;transform:translateX(-50%);width:16px;height:84px;background:#ef4444;' +
-  'clip-path:polygon(50% 0,100% 32%,58% 32%,58% 100%,42% 100%,42% 32%,0 32%);' +
-  'filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));' +
+  'left:50%;transform:translateX(-50%);width:30px;height:108px;background:#ef4444;' +
+  'clip-path:polygon(50% 0,100% 34%,60% 34%,60% 100%,40% 100%,40% 34%,0 34%);' +
+  'filter:drop-shadow(0 2px 3px rgba(0,0,0,.35));' +
+  'animation:ffBob 1.4s ease-in-out infinite;' +
   'z-index:2147483647;pointer-events:none;}' +
-  '[data-ff-new]::before{content:"NEW";position:absolute;top:calc(100% + 96px);' +
-  'left:50%;transform:translateX(-50%);color:#ef4444;background:rgba(239,68,68,.1);' +
-  'border:1px solid rgba(239,68,68,.4);padding:3px 7px;border-radius:5px;' +
-  'font:600 9px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.12em;' +
+  '[data-ff-new]::before{content:"NEW";position:absolute;top:calc(100% + 122px);' +
+  'left:50%;transform:translateX(-50%);color:#fff;background:#ef4444;' +
+  'border-radius:7px;padding:6px 13px;box-shadow:0 5px 14px rgba(239,68,68,.4);' +
+  'font:800 15px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.1em;' +
+  'animation:ffBob 1.4s ease-in-out infinite;' +
   'z-index:2147483647;pointer-events:none;white-space:nowrap;}' +
   '</style>';
 
