@@ -64,6 +64,22 @@ export async function generateAfter(payload) {
   return data; // { before, after }
 }
 
+// Generate a slideshow walkthrough for the proposed change: the server applies the
+// fix, then Playwright-screenshots the new design into an ordered set of captioned
+// slides (a clean overview + a "find it"/"use it" pair per change).
+export async function generateWalkthrough(payload) {
+  const res = await fetch('/api/walkthrough', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !Array.isArray(data.slides) || data.slides.length === 0) {
+    throw new Error(data?.error || `Failed to generate walkthrough (${res.status})`);
+  }
+  return data; // { slides, after }
+}
+
 // Ask the backend (isolated Copilot CLI) to refine a developer-ready prompt for the
 // proposed change, tailored so it can be pasted into any external AI coding assistant.
 export async function generateDevPrompt(payload) {

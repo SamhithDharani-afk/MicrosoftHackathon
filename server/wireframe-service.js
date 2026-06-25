@@ -25,6 +25,8 @@ import {
   buildBeforePrompt,
   buildAfterPrompt,
   buildDevPromptRequest,
+  buildWalkthroughStepsPrompt,
+  parseStepsJson,
   extractAnswer,
   cleanHtml,
   shouldCopyHomeEntry,
@@ -66,7 +68,16 @@ function resolveCopilot() {
       .split(/\r?\n/)
       .map((s) => s.trim())
       .filter(Boolean);
-    if (found.length) return found[0];
+    if (found.length) {
+      if (process.platform === 'win32') {
+        // `where copilot` can list an extensionless shell script first (e.g. the
+        // VS Code-bundled `copilot`), which CreateProcess cannot launch with
+        // shell:false and fails with ENOENT. Prefer a real .exe.
+        const byExt = (ext) => found.find((p) => p.toLowerCase().endsWith(ext));
+        return byExt('.exe') || byExt('.cmd') || byExt('.bat') || found[0];
+      }
+      return found[0];
+    }
   } catch {
     // fall through
   }
@@ -291,6 +302,215 @@ export async function applyFix(db, { websiteId, url, imagePath, painPointSummary
   const after = cleanHtml(extractAnswer(stdout));
   if (!after) throw new Error('Model returned no HTML for the proposed change.');
   return { before, after: ensureChangeMarker(before, after) };
+}
+
+// ── Slideshow walkthrough (Playwright) ─────────────────────────
+// CSS injected before screenshotting so the change reads clearly in the slides.
+// Only the element we explicitly tag with data-ff-mark is highlighted (so we can
+// spotlight one change at a time), with a red outline, glow, and a "NEW" badge.
+const SLIDE_MARKER_CSS =
+  '[data-ff-mark]{position:relative !important;outline:3px solid #ef4444 !important;' +
+  'outline-offset:3px !important;border-radius:6px !important;' +
+  'box-shadow:0 0 0 6px rgba(239,68,68,.22) !important;}' +
+  '[data-ff-mark]::after{content:"NEW";position:absolute;left:50%;top:-28px;' +
+  'transform:translateX(-50%);background:#ef4444;color:#fff;' +
+  'font:700 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.08em;' +
+  'padding:4px 9px;border-radius:6px;white-space:nowrap;z-index:2147483647;' +
+  'box-shadow:0 4px 12px rgba(239,68,68,.45);pointer-events:none;}';
+
+// Classify where an element sits on the 1280x900 design so captions can name the
+// region ("top navigation bar", "left sidebar", …) in plain language.
+function regionFor(box) {
+  if (box.y < 80) return 'top navigation bar';
+  if (box.x < 240) return 'left sidebar';
+  if (box.x > 1040) return 'right panel';
+  if (box.y > 760) return 'bottom of the page';
+  return 'main content area';
+}
+
+// Turn a tagged control's raw DOM facts into a human description: a readable name
+// with no emoji/symbol noise, the kind of control it is, and the verb to use it.
+function describeChange({ text, aria, title, tag, role, type }) {
+  const strip = (s) =>
+    String(s || '')
+      .replace(/\p{Extended_Pictographic}/gu, '')
+      .replace(/[\u2190-\u27BF\u2B00-\u2BFF]/g, '')
+      .replace(/\uFE0F/g, '')
+      .replace(/\u200D/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const name = (strip(text) || strip(aria) || strip(title)).slice(0, 44);
+  const noun =
+    tag === 'a' ? 'link'
+      : tag === 'button' || role === 'button' ? 'button'
+      : tag === 'select' ? 'dropdown'
+      : tag === 'textarea' ? 'field'
+      : tag === 'input' ? (type === 'checkbox' || type === 'radio' ? 'option' : 'field')
+      : 'control';
+  const verb =
+    tag === 'a' || tag === 'button' || role === 'button' ? 'Click'
+      : type === 'checkbox' || type === 'radio' || role === 'switch' ? 'Toggle'
+      : tag === 'input' || tag === 'textarea' || tag === 'select' ? 'Use'
+      : 'Select';
+  // e.g. "“Settings” button", or just "new button" when the control is icon-only.
+  const label = name ? `“${name}” ${noun}` : `new ${noun}`;
+  return { name, noun, verb, label };
+}
+
+// Render the generated AFTER html with a headless browser and capture an ordered
+// set of slides: a clean overview, then for EACH change a "find it" full-page shot
+// and a zoomed-in "use it" shot. Returns the slides (with deterministic captions as
+// a fallback) plus the detected change list so the caller can request richer
+// narration. Reuses the same Playwright/chromium setup as the live-page screenshots.
+async function captureWalkthroughSlides(afterHtml, { websiteName, fixTitle, fixDescription }) {
+  let browser;
+  try {
+    browser = await chromium.launch();
+    const page = await browser.newPage({ viewport: VIEWPORT });
+    try {
+      await page.setContent(afterHtml, { waitUntil: 'networkidle', timeout: 30000 });
+    } catch {
+      await page.setContent(afterHtml, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    }
+    await page.addStyleTag({ content: SLIDE_MARKER_CSS });
+    await page.waitForTimeout(300);
+
+    const toDataUrl = (buf) => `data:image/png;base64,${buf.toString('base64')}`;
+    const slides = [];
+    const changes = [];
+
+    // 1) Clean overview — the new design in context (no marker shown yet).
+    slides.push({
+      kind: 'overview',
+      slot: { beat: 'overview' },
+      title: `The redesigned ${websiteName || 'experience'}`,
+      caption: fixTitle
+        ? `${fixTitle} — applied to the real design. Here is how a user discovers and uses it.`
+        : 'The proposed change, applied to the real design.',
+      image: toDataUrl(await page.screenshot({ fullPage: false })),
+    });
+
+    // 2) One "find it" + one "use it" slide per tagged change.
+    const handles = await page.$$('[data-ff-new]');
+    let step = 1;
+    let changeIndex = 0;
+    for (const handle of handles) {
+      const box = await handle.boundingBox();
+      if (!box) continue;
+      const raw = await handle.evaluate((el) => ({
+        text: (el.innerText || el.textContent || '').trim(),
+        aria: el.getAttribute('aria-label') || '',
+        title: el.getAttribute('title') || '',
+        tag: el.tagName.toLowerCase(),
+        role: el.getAttribute('role') || '',
+        type: el.getAttribute('type') || '',
+      }));
+      const region = regionFor(box);
+      const d = describeChange(raw);
+      changes.push({ ...d, region });
+
+      // Spotlight just this element.
+      await handle.evaluate((el) => el.setAttribute('data-ff-mark', 'true'));
+      await page.waitForTimeout(120);
+
+      // "Find it" — full page so the user can place the change in context.
+      slides.push({
+        kind: 'locate',
+        slot: { beat: 'find', change: changeIndex },
+        title: `Step ${step}: Find the ${d.label}`,
+        caption: `The ${d.label} now sits in the ${region}, where users naturally look — no more digging through nested menus to solve this.`,
+        image: toDataUrl(await page.screenshot({ fullPage: false })),
+      });
+      step += 1;
+
+      // "Use it" — zoom into the control (clip around it, with padding for the badge).
+      const pad = 64;
+      const x = Math.max(0, box.x - pad);
+      const y = Math.max(0, box.y - pad - 24);
+      const clip = {
+        x,
+        y,
+        width: Math.min(box.width + pad * 2, VIEWPORT.width - x),
+        height: Math.min(box.height + pad * 2 + 24, VIEWPORT.height - y),
+      };
+      slides.push({
+        kind: 'use',
+        slot: { beat: 'use', change: changeIndex },
+        title: `Step ${step}: ${d.verb} the ${d.label}`,
+        caption: `${d.verb} the ${d.label} to ${fixDescription ? 'complete the task' : 'reach the feature'} in a single step. ${fixDescription || 'It is now an obvious, direct action.'}`,
+        image: toDataUrl(await page.screenshot({ clip })),
+      });
+      step += 1;
+
+      await handle.evaluate((el) => el.removeAttribute('data-ff-mark'));
+      changeIndex += 1;
+    }
+
+    return { slides, changes };
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
+// Ask the isolated Copilot CLI to narrate the walkthrough for the detected changes,
+// returning specific step captions. Returns null (callers keep the deterministic
+// fallback captions) on any failure or malformed output.
+async function narrateWalkthrough(ctx) {
+  try {
+    const stdout = await runCopilot(buildWalkthroughStepsPrompt(ctx));
+    const json = parseStepsJson(extractAnswer(stdout));
+    if (json && Array.isArray(json.steps)) return json;
+  } catch {
+    // narration is best-effort; deterministic captions remain
+  }
+  return null;
+}
+
+// Overlay model-written captions onto the captured slides (by slot), leaving the
+// images untouched. Any missing field falls back to the deterministic caption.
+function applyNarration(slides, narration) {
+  if (!narration) return;
+  for (const slide of slides) {
+    const { beat, change } = slide.slot || {};
+    if (beat === 'overview') {
+      if (narration.overviewTitle) slide.title = narration.overviewTitle;
+      if (narration.overviewCaption) slide.caption = narration.overviewCaption;
+    } else if ((beat === 'find' || beat === 'use') && narration.steps?.[change]) {
+      const s = narration.steps[change];
+      if (beat === 'find') {
+        if (s.findTitle) slide.title = s.findTitle;
+        if (s.findCaption) slide.caption = s.findCaption;
+      } else {
+        if (s.useTitle) slide.title = s.useTitle;
+        if (s.useCaption) slide.caption = s.useCaption;
+      }
+    }
+  }
+}
+
+// Generate a slideshow walkthrough for a proposed change: apply the fix to get the
+// AFTER html, screenshot it into an ordered set of slides, then ask the model to
+// narrate specific, non-trivial step captions for the changes it detected.
+export async function generateWalkthrough(db, opts) {
+  const { after } = await applyFix(db, opts);
+  const { slides, changes } = await captureWalkthroughSlides(after, {
+    websiteName: opts.websiteName || '',
+    fixTitle: opts.fixTitle || '',
+    fixDescription: opts.fixDescription || '',
+  });
+  if (!slides.length) throw new Error('Could not capture any walkthrough slides.');
+  if (changes.length) {
+    const narration = await narrateWalkthrough({
+      websiteName: opts.websiteName || '',
+      painPointSummary: opts.painPointSummary || '',
+      fixTitle: opts.fixTitle || '',
+      fixDescription: opts.fixDescription || '',
+      changes,
+    });
+    applyNarration(slides, narration);
+  }
+  // Strip internal slot metadata before sending to the client.
+  return { slides: slides.map(({ slot: _slot, ...s }) => s), after };
 }
 
 // Ask the isolated Copilot CLI to write a developer-ready prompt (for an external AI

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { feedbackEntries as seedFeedback, painPoints as curatedPainPoints, websites } from '../src/data/mockData.js';
 import { clusterFeedback } from '../src/data/clustering.js';
-import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, generateDevPrompt, localScreenshotPath } from './wireframe-service.js';
+import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, generateWalkthrough, generateDevPrompt, localScreenshotPath } from './wireframe-service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -173,6 +173,31 @@ app.post('/api/wireframe/after', async (req, res) => {
       fixDescription: b.fixDescription || '',
     });
     res.json({ before, after });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+// Generate a slideshow walkthrough: apply the fix, then Playwright-screenshot the
+// resulting AFTER design into an ordered set of captioned slides (overview + a
+// find-it / use-it pair per change).
+app.post('/api/walkthrough', async (req, res) => {
+  const b = req.body || {};
+  if (!b.websiteId || !b.fixTitle) {
+    return res.status(400).json({ error: 'websiteId and fixTitle are required' });
+  }
+  const liveUrl = resolveUrl(b.websiteId, b.url);
+  try {
+    const { slides, after } = await generateWalkthrough(db, {
+      websiteId: String(b.websiteId),
+      url: liveUrl,
+      imagePath: resolveImage(b.websiteId),
+      websiteName: websites.find((w) => w.id === b.websiteId)?.name || '',
+      painPointSummary: b.painPointSummary || '',
+      fixTitle: String(b.fixTitle),
+      fixDescription: b.fixDescription || '',
+    });
+    res.json({ slides, after });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
