@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, Sparkles, RefreshCw, Timer, Maximize2, Minimize2 } from 'lucide-react';
+import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, Sparkles, RefreshCw, Timer, Maximize2, Minimize2, Locate } from 'lucide-react';
 import { wireframes } from '../data/mockData';
 import { resolveWireframeContext } from '../utils/wireframeContext';
 import { fetchWireframe, generateAfter } from '../utils/api';
@@ -316,8 +316,11 @@ const DESIGN_H = 900;
 function GeneratedFrame({ html, kind, url }) {
   const isAfter = kind === 'after';
   const wrapRef = useRef(null);
+  const iframeRef = useRef(null);
+  const changeIdxRef = useRef(0);
   const [fitWidth, setFitWidth] = useState(true);
   const [scale, setScale] = useState(1);
+  const [changeCount, setChangeCount] = useState(0);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -334,6 +337,58 @@ function GeneratedFrame({ html, kind, url }) {
     const linksSafe = neutralizeLinks(html);
     return isAfter ? injectChangeMarkers(linksSafe) : linksSafe;
   }, [html, isAfter]);
+
+  // Read the change-marked elements out of the (same-origin) iframe document.
+  const readChanges = useCallback(() => {
+    try {
+      const doc = iframeRef.current?.contentDocument;
+      if (!doc) return [];
+      return Array.from(doc.querySelectorAll('[data-ff-new]'));
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // Once the frame loads, count the changes so we can offer a "View changes" jump.
+  const handleIframeLoad = useCallback(() => {
+    if (!isAfter) {
+      setChangeCount(0);
+      return;
+    }
+    changeIdxRef.current = 0;
+    setChangeCount(readChanges().length);
+  }, [isAfter, readChanges]);
+
+  // Scroll the frame so the next change (and its arrow) is centered, then flash it.
+  const viewNextChange = useCallback(() => {
+    const els = readChanges();
+    const wrap = wrapRef.current;
+    if (!els.length || !wrap) return;
+    const idx = changeIdxRef.current % els.length;
+    const el = els[idx];
+    // The iframe is not internally scrolled, so getBoundingClientRect() inside it
+    // gives design-space coords; multiply by scale to map to the scaled scroller.
+    const r = el.getBoundingClientRect();
+    const centerX = (r.left + r.width / 2) * scale;
+    const centerY = (r.top + r.height / 2) * scale;
+    wrap.scrollTo({
+      left: Math.max(0, centerX - wrap.clientWidth / 2),
+      top: Math.max(0, centerY - wrap.clientHeight / 2 + 70 * scale),
+      behavior: 'smooth',
+    });
+    try {
+      el.animate(
+        [
+          { boxShadow: '0 0 0 6px rgba(239,68,68,.55)' },
+          { boxShadow: '0 0 0 18px rgba(239,68,68,0)' },
+        ],
+        { duration: 900, iterations: 2 },
+      );
+    } catch {
+      /* WAAPI not critical */
+    }
+    changeIdxRef.current = idx + 1;
+  }, [readChanges, scale]);
 
   return (
     <div className={`rounded-xl border-2 overflow-hidden ${isAfter ? 'border-green-500/40' : 'border-red-500/40'}`}>
@@ -362,8 +417,10 @@ function GeneratedFrame({ html, kind, url }) {
         <div style={{ width: DESIGN_W * scale, height: DESIGN_H * scale }}>
           <iframe
             title={`${kind} wireframe`}
+            ref={iframeRef}
+            onLoad={handleIframeLoad}
             srcDoc={safeHtml}
-            sandbox=""
+            sandbox={isAfter ? 'allow-same-origin' : ''}
             style={{
               width: DESIGN_W,
               height: DESIGN_H,
@@ -383,6 +440,21 @@ function GeneratedFrame({ html, kind, url }) {
           </span>
         )}
       </div>
+      {isAfter && changeCount > 0 && (
+        <div className="bg-gray-900 px-4 py-2.5 border-t border-gray-700 flex items-center justify-between gap-3">
+          <span className="text-xs text-gray-400">
+            {changeCount === 1 ? '1 change in this design' : `${changeCount} changes in this design`}
+          </span>
+          <button
+            type="button"
+            onClick={viewNextChange}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-500 text-white text-xs font-medium transition-colors"
+          >
+            <Locate className="w-3.5 h-3.5" />
+            {changeCount > 1 ? 'View changes' : 'View change'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
