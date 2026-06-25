@@ -5,7 +5,6 @@ import path from 'node:path';
 import { feedbackEntries as seedFeedback, painPoints as curatedPainPoints, websites } from '../src/data/mockData.js';
 import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath } from './wireframe-service.js';
 import { assistFeedback } from './assist-service.js';
-import { hasToken } from './github-models.js';
 import {
   ensureCoalesceTable,
   coalesceFeedback,
@@ -144,7 +143,7 @@ function coalesceOnce(websiteId, rows) {
     feedback: rows,
     websiteId,
     curatedPainPoints,
-    allowFallback: false, // throw instead of falling back to the heuristic
+    allowFallback: true, // fall back to the deterministic heuristic when no token
   }).finally(() => coalesceInFlight.delete(websiteId));
   coalesceInFlight.set(websiteId, p);
   return p;
@@ -176,14 +175,12 @@ app.get('/api/pain-points', async (req, res) => {
     // Only generate inline for an explicitly requested website, so the
     // all-websites view stays fast and never blocks on the model.
     if (!single) continue;
-    if (!hasToken()) {
-      error = 'AI analysis unavailable: set GITHUB_TOKEN on the server to analyze feedback.';
-      continue;
-    }
+    // No token required: coalesceOnce falls back to the deterministic keyword
+    // clustering heuristic when GitHub Models isn't available (cheaper path).
     try {
       painPoints.push(...(await coalesceOnce(id, rows)));
     } catch {
-      error = 'AI analysis failed while clustering this feedback. Please try again.';
+      error = 'Analysis failed while clustering this feedback. Please try again.';
     }
   }
 
@@ -295,7 +292,6 @@ app.post('/api/wireframe/after', async (req, res) => {
 app.post('/api/process-flow', async (req, res) => {
   const { painPoint, websiteName, refinement } = req.body || {};
   if (!painPoint?.id) return res.status(400).json({ error: 'painPoint is required' });
-  if (!hasToken()) return res.status(503).json({ error: 'AI unavailable: set GITHUB_TOKEN on the server.' });
   try {
     const flow = await generateProcessFlow(db, { painPoint, websiteName, refinement });
     res.json({ flow });
@@ -307,7 +303,6 @@ app.post('/api/process-flow', async (req, res) => {
 app.post('/api/walkthrough', async (req, res) => {
   const { painPoint, websiteName, refinement } = req.body || {};
   if (!painPoint?.id) return res.status(400).json({ error: 'painPoint is required' });
-  if (!hasToken()) return res.status(503).json({ error: 'AI unavailable: set GITHUB_TOKEN on the server.' });
   try {
     const walkthrough = await generateWalkthrough(db, { painPoint, websiteName, refinement });
     res.json({ walkthrough });
@@ -322,7 +317,6 @@ app.post('/api/walkthrough', async (req, res) => {
 app.post('/api/dev-prompt', async (req, res) => {
   const { painPoint, websiteName, url, refinement } = req.body || {};
   if (!painPoint?.id) return res.status(400).json({ error: 'painPoint is required' });
-  if (!hasToken()) return res.status(503).json({ error: 'AI unavailable: set GITHUB_TOKEN on the server.' });
   try {
     const result = await generateDevPrompt(db, { painPoint, websiteName, url, refinement });
     res.json(result);

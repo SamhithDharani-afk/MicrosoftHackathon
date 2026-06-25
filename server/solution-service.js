@@ -125,15 +125,22 @@ export async function generateProcessFlow(db, { painPoint, websiteName, refineme
     if (cached) return cached;
   }
 
-  const out = await chatJSON({
-    system:
-      'You are a precise UX flow designer. You always return strict JSON matching ' +
-      'the requested schema and never add commentary.',
-    user: buildFlowPrompt(painPoint, websiteName, refinement),
-    temperature: 0.3,
-    maxTokens: 900,
-    timeoutMs: 30000,
-  });
+  // Use the model when a token is available; otherwise fall back to the
+  // deterministic local builder so the feature works without GitHub Models.
+  let out = null;
+  try {
+    out = await chatJSON({
+      system:
+        'You are a precise UX flow designer. You always return strict JSON matching ' +
+        'the requested schema and never add commentary.',
+      user: buildFlowPrompt(painPoint, websiteName, refinement),
+      temperature: 0.3,
+      maxTokens: 900,
+      timeoutMs: 30000,
+    });
+  } catch {
+    out = null;
+  }
   const flow = normalizeFlow(out, painPoint);
   putCache(db, painPoint.id, 'process-flow', hash, flow);
   return flow;
@@ -181,15 +188,20 @@ export async function generateWalkthrough(db, { painPoint, websiteName, refineme
     if (cached) return cached;
   }
 
-  const out = await chatJSON({
-    system:
-      'You are a clear technical writer. You always return strict JSON matching the ' +
-      'requested schema and never add commentary.',
-    user: buildWalkthroughPrompt(painPoint, websiteName, refinement),
-    temperature: 0.3,
-    maxTokens: 900,
-    timeoutMs: 30000,
-  });
+  let out = null;
+  try {
+    out = await chatJSON({
+      system:
+        'You are a clear technical writer. You always return strict JSON matching the ' +
+        'requested schema and never add commentary.',
+      user: buildWalkthroughPrompt(painPoint, websiteName, refinement),
+      temperature: 0.3,
+      maxTokens: 900,
+      timeoutMs: 30000,
+    });
+  } catch {
+    out = null;
+  }
   const walkthrough = normalizeWalkthrough(out, painPoint);
   putCache(db, painPoint.id, 'walkthrough', hash, walkthrough);
   return walkthrough;
@@ -232,18 +244,23 @@ export async function generateDevPrompt(db, { painPoint, websiteName, url, refin
     if (cached) return cached;
   }
 
-  const out = await chatJSON({
-    system:
-      'You are a senior engineer who writes precise, actionable prompts for AI ' +
-      'coding assistants. You always return strict JSON matching the requested ' +
-      'schema and never add commentary.',
-    user:
-      buildDevPromptPrompt(painPoint, websiteName, url) +
-      (refinement ? `\n\n${refineBlock(refinement)}` : ''),
-    temperature: 0.3,
-    maxTokens: 1200,
-    timeoutMs: 30000,
-  });
+  let out = null;
+  try {
+    out = await chatJSON({
+      system:
+        'You are a senior engineer who writes precise, actionable prompts for AI ' +
+        'coding assistants. You always return strict JSON matching the requested ' +
+        'schema and never add commentary.',
+      user:
+        buildDevPromptPrompt(painPoint, websiteName, url) +
+        (refinement ? `\n\n${refineBlock(refinement)}` : ''),
+      temperature: 0.3,
+      maxTokens: 1200,
+      timeoutMs: 30000,
+    });
+  } catch {
+    out = null;
+  }
   const fallback =
     `Implement a fix for the following product issue.\n\n` +
     `Issue: ${painPoint.title || ''}\n` +
