@@ -293,6 +293,9 @@ const CHANGE_MARKER_STYLE =
   'font:800 15px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.1em;' +
   'animation:ffBob 1.4s ease-in-out infinite;' +
   'z-index:2147483647;pointer-events:none;white-space:nowrap;}' +
+  '@media(prefers-reduced-motion:reduce){' +
+  '[data-ff-new]{animation:none !important;}' +
+  '[data-ff-new]::after,[data-ff-new]::before{animation:none;}}' +
   '</style>';
 
 // Insert the marker CSS into a generated document (before </head>, else after <body>,
