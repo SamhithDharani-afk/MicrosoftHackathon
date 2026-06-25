@@ -47,13 +47,14 @@ export function buildAfterPrompt({ beforeHtml, painPointSummary, fixTitle, fixDe
     `Here is the complete HTML of a web page:\n"""\n${String(beforeHtml || '')}\n"""\n\n` +
     `User feedback / pain point: '${painPointSummary || 'N/A'}'.\n` +
     `Apply ONLY this change to the page: '${fixTitle} — ${fixDescription}'.\n\n` +
-    `CRITICAL — TAG THE CHANGE (do this every time):\n` +
-    `On the single HTML element you add or modify to implement the fix, add the ` +
-    `attribute data-ff-new="true". Add it to exactly ONE element and to no other ` +
-    `element. Example: <button data-ff-new="true" class="...">Settings</button>. ` +
-    `This attribute renders nothing visible by itself — it is a hook used later to ` +
-    `highlight the change — so it does NOT count as a visible label. Omitting it is a ` +
-    `failure.\n\n` +
+    `CRITICAL — TAG EVERY CHANGE (do this every time):\n` +
+    `On EACH HTML element you add or modify to implement the fix, add the attribute ` +
+    `data-ff-new="true". If the fix has multiple parts, tag the one element for each ` +
+    `part (so there may be several tagged elements); if it is a single change, tag ` +
+    `exactly one. Do not tag unrelated, unchanged elements. Example: ` +
+    `<button data-ff-new="true" class="...">+ New post</button>. This attribute ` +
+    `renders nothing visible by itself — it is a hook used later to highlight the ` +
+    `change — so it does NOT count as a visible label. Omitting it is a failure.\n\n` +
     `RULES (follow exactly):\n` +
     `- Keep everything else byte-for-byte identical so the fix is the only visible ` +
     `difference. Same layout, palette, text, fonts and proportions otherwise.\n` +
