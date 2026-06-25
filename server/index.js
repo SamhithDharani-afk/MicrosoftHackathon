@@ -3,8 +3,25 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { feedbackEntries as seedFeedback, painPoints as curatedPainPoints, websites } from '../src/data/mockData.js';
+<<<<<<< HEAD
 import { clusterFeedback } from '../src/data/clustering.js';
 import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, generateWalkthrough, generateDevPrompt, localScreenshotPath } from './wireframe-service.js';
+=======
+import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath } from './wireframe-service.js';
+import { assistFeedback } from './assist-service.js';
+import { hasToken } from './github-models.js';
+import {
+  ensureCoalesceTable,
+  coalesceFeedback,
+  getCachedClusters,
+} from './coalesce-service.js';
+import {
+  ensureSolutionTable,
+  generateProcessFlow,
+  generateWalkthrough,
+  generateDevPrompt,
+} from './solution-service.js';
+>>>>>>> origin/main
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -29,6 +46,12 @@ db.exec(`
 
 // Wireframe cache table (before_html per website, generated from a screenshot).
 ensureWireframeTable(db);
+
+// AI pain-point cluster cache (semantic coalescing of feedback per website).
+ensureCoalesceTable(db);
+
+// AI-generated solution artifacts (process flows, walkthroughs) per pain point.
+ensureSolutionTable(db);
 
 // Seed the example feedback once, so dashboards aren't empty on first run.
 const { c: existing } = db.prepare('SELECT COUNT(*) AS c FROM feedback').get();
@@ -107,23 +130,87 @@ app.post('/api/feedback', (req, res) => {
 });
 
 // Pain points — clustered live from the database, not hardcoded.
-app.get('/api/pain-points', (req, res) => {
+//
+// GET /api/pain-points → AI-coalesced pain points.
+//
+// Response shape: { analyzing: boolean, error: string|null, painPoints: [...] }.
+//
+// The pain points come from the model only — we NEVER show the keyword heuristic
+// to users (it produced confusing, unrelated clusters). On a cache miss for a
+// specific website we run the model inline and return its clusters; if the model
+// can't run we return an explicit error rather than a heuristic. For the
+// all-websites view we serve whatever is already cached (no inline generation),
+// since each site is generated when its dashboard is opened.
+const coalesceInFlight = new Map();
+function coalesceOnce(websiteId, rows) {
+  const existing = coalesceInFlight.get(websiteId);
+  if (existing) return existing;
+  const p = coalesceFeedback(db, {
+    feedback: rows,
+    websiteId,
+    curatedPainPoints,
+    allowFallback: false, // throw instead of falling back to the heuristic
+  }).finally(() => coalesceInFlight.delete(websiteId));
+  coalesceInFlight.set(websiteId, p);
+  return p;
+}
+
+app.get('/api/pain-points', async (req, res) => {
   const { websiteId } = req.query;
+  const single = !!websiteId;
   let ids;
-  if (websiteId) {
+  if (single) {
     ids = [websiteId];
   } else {
-    // Any website that has feedback, plus the seeded examples.
     const fromDb = db.prepare('SELECT DISTINCT website_id FROM feedback').all().map((r) => r.website_id);
     ids = [...new Set([...websites.map((w) => w.id), ...fromDb])];
   }
-  const all = [];
+
   const stmt = db.prepare('SELECT * FROM feedback WHERE website_id = ? ORDER BY created_at DESC, rowid DESC');
+  const painPoints = [];
+  let error = null;
+
   for (const id of ids) {
     const rows = stmt.all(id).map(toClient);
-    all.push(...clusterFeedback(rows, id, curatedPainPoints));
+    if (!rows.length) continue;
+    const cached = getCachedClusters(db, id, rows);
+    if (cached) {
+      painPoints.push(...cached);
+      continue;
+    }
+    // Only generate inline for an explicitly requested website, so the
+    // all-websites view stays fast and never blocks on the model.
+    if (!single) continue;
+    if (!hasToken()) {
+      error = 'AI analysis unavailable: set GITHUB_TOKEN on the server to analyze feedback.';
+      continue;
+    }
+    try {
+      painPoints.push(...(await coalesceOnce(id, rows)));
+    } catch {
+      error = 'AI analysis failed while clustering this feedback. Please try again.';
+    }
   }
-  res.json(all);
+
+  res.json({ analyzing: false, error, painPoints });
+});
+
+// Real-time feedback assistant: score + nudges + quick-insert suggestions from a
+// low-latency model (GitHub Models). Returns { ok:false } on any failure so the
+// client keeps its instant heuristic output. The token lives only on the server.
+app.post('/api/assist', async (req, res) => {
+  const { text, category, hasImages } = req.body || {};
+  if (!text || !String(text).trim()) return res.json({ ok: false });
+  try {
+    const result = await assistFeedback({
+      text: String(text),
+      category,
+      hasImages: !!hasImages,
+    });
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    res.json({ ok: false, error: String(e?.message || e) });
+  }
 });
 
 // ── Wireframes ─────────────────────────────────────────────────
@@ -133,6 +220,10 @@ const resolveUrl = (websiteId, override) =>
 // Resolve a website's bundled screenshot asset (preferred vision source).
 const resolveImage = (websiteId) =>
   localScreenshotPath(websites.find((w) => w.id === websiteId)?.screenshotAsset);
+// Resolve a website's bundled curated "before" HTML (used verbatim, no screenshot)
+// for pages that block headless capture (e.g. support.microsoft.com).
+const resolveHtml = (websiteId) =>
+  localHtmlPath(websites.find((w) => w.id === websiteId)?.beforeHtmlAsset);
 
 // Return the pre-generated "before" wireframe for a website, generating + caching
 // it (screenshot -> faithful HTML) on first use.
@@ -148,6 +239,7 @@ app.get('/api/wireframe', async (req, res) => {
       websiteId,
       url: liveUrl,
       imagePath: resolveImage(websiteId),
+      htmlPath: resolveHtml(websiteId),
     });
     res.json({ before, url: liveUrl, ready: true });
   } catch (e) {
@@ -155,8 +247,29 @@ app.get('/api/wireframe', async (req, res) => {
   }
 });
 
+// Capture the live page as a screenshot (base64 data URL), cached per website.
+// Powers the "Live page" toggle in the Before panel so users can compare the
+// proposed fix against the real current page, not just the reconstructed wireframe.
+app.get('/api/wireframe/screenshot', async (req, res) => {
+  const { websiteId, url, refresh } = req.query;
+  if (!websiteId) return res.status(400).json({ error: 'websiteId is required' });
+  const liveUrl = resolveUrl(websiteId, url);
+  try {
+    const image = await getOrCreateScreenshot(db, {
+      websiteId,
+      url: liveUrl,
+      imagePath: resolveImage(websiteId),
+      refresh: refresh === '1' || refresh === 'true',
+    });
+    res.json({ image, url: liveUrl });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // Generate the "after" wireframe on the fly: load the cached before, apply ONLY
-// the proposed fix, and return both documents.
+// the proposed fix, and return both documents. An optional `refinement` note lets
+// the user correct a wrong result ("put the gear top-right") and regenerate.
 app.post('/api/wireframe/after', async (req, res) => {
   const b = req.body || {};
   if (!b.websiteId || !b.fixTitle) {
@@ -168,9 +281,11 @@ app.post('/api/wireframe/after', async (req, res) => {
       websiteId: String(b.websiteId),
       url: liveUrl,
       imagePath: resolveImage(b.websiteId),
+      htmlPath: resolveHtml(b.websiteId),
       painPointSummary: b.painPointSummary || '',
       fixTitle: String(b.fixTitle),
       fixDescription: b.fixDescription || '',
+      refinement: b.refinement || '',
     });
     res.json({ before, after });
   } catch (e) {
@@ -178,6 +293,7 @@ app.post('/api/wireframe/after', async (req, res) => {
   }
 });
 
+<<<<<<< HEAD
 // Generate a slideshow walkthrough: apply the fix, then Playwright-screenshot the
 // resulting AFTER design into an ordered set of captioned slides (overview + a
 // find-it / use-it pair per change).
@@ -220,6 +336,48 @@ app.post('/api/dev-prompt', async (req, res) => {
     res.json({ prompt });
   } catch (e) {
     res.status(502).json({ error: e.message });
+=======
+// ── AI-generated solution artifacts (per pain point) ───────────────────────
+// Both endpoints take the pain point itself so they work for ANY pain point —
+// curated or AI-clustered — not just the bundled demo solutions. Results are
+// cached server-side per pain point, so repeated visits are instant + stable.
+app.post('/api/process-flow', async (req, res) => {
+  const { painPoint, websiteName, refinement } = req.body || {};
+  if (!painPoint?.id) return res.status(400).json({ error: 'painPoint is required' });
+  if (!hasToken()) return res.status(503).json({ error: 'AI unavailable: set GITHUB_TOKEN on the server.' });
+  try {
+    const flow = await generateProcessFlow(db, { painPoint, websiteName, refinement });
+    res.json({ flow });
+  } catch (e) {
+    res.status(502).json({ error: String(e?.message || e) });
+  }
+});
+
+app.post('/api/walkthrough', async (req, res) => {
+  const { painPoint, websiteName, refinement } = req.body || {};
+  if (!painPoint?.id) return res.status(400).json({ error: 'painPoint is required' });
+  if (!hasToken()) return res.status(503).json({ error: 'AI unavailable: set GITHUB_TOKEN on the server.' });
+  try {
+    const walkthrough = await generateWalkthrough(db, { painPoint, websiteName, refinement });
+    res.json({ walkthrough });
+  } catch (e) {
+    res.status(502).json({ error: String(e?.message || e) });
+  }
+});
+
+// Generate a paste-ready prompt an engineer can drop into Copilot / Claude /
+// Cursor to implement the fix in their own codebase. Cached per pain point;
+// `refinement` regenerates with a correction note.
+app.post('/api/dev-prompt', async (req, res) => {
+  const { painPoint, websiteName, url, refinement } = req.body || {};
+  if (!painPoint?.id) return res.status(400).json({ error: 'painPoint is required' });
+  if (!hasToken()) return res.status(503).json({ error: 'AI unavailable: set GITHUB_TOKEN on the server.' });
+  try {
+    const result = await generateDevPrompt(db, { painPoint, websiteName, url, refinement });
+    res.json(result);
+  } catch (e) {
+    res.status(502).json({ error: String(e?.message || e) });
+>>>>>>> origin/main
   }
 });
 

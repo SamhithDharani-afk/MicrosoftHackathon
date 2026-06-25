@@ -1,10 +1,21 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+<<<<<<< HEAD
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, Sparkles, RefreshCw, Timer, Maximize2, Minimize2, Locate } from 'lucide-react';
 import { wireframes } from '../data/mockData';
 import { resolveWireframeContext } from '../utils/wireframeContext';
 import { fetchWireframe, generateAfter } from '../utils/api';
 import AIPromptPanel from '../components/AIPromptPanel';
+=======
+import { useParams, useLocation, Link } from 'react-router-dom';
+import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, Sparkles, RefreshCw, Timer, Maximize2, Minimize2, LayoutTemplate, Image as ImageIcon, Locate } from 'lucide-react';
+import { wireframes } from '../data/mockData';
+import { resolveWireframeContext, buildPainPointWireframeContext } from '../utils/wireframeContext';
+import { fetchWireframe, generateAfter, fetchScreenshot, fetchPainPoints } from '../utils/api';
+import { useWebsites } from '../context/WebsitesContext';
+import RefineBox from '../components/RefineBox';
+import DevPromptButton from '../components/DevPromptButton';
+>>>>>>> origin/main
 
 function WireframePanel({ type, data, showCallouts = false }) {
   const isAfter = type === 'after';
@@ -293,9 +304,12 @@ const CHANGE_MARKER_STYLE =
   'font:800 15px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.1em;' +
   'animation:ffBob 1.4s ease-in-out infinite;' +
   'z-index:2147483647;pointer-events:none;white-space:nowrap;}' +
+<<<<<<< HEAD
   '@media(prefers-reduced-motion:reduce){' +
   '[data-ff-new]{animation:none !important;}' +
   '[data-ff-new]::after,[data-ff-new]::before{animation:none;}}' +
+=======
+>>>>>>> origin/main
   '</style>';
 
 // Insert the marker CSS into a generated document (before </head>, else after <body>,
@@ -316,7 +330,8 @@ const DESIGN_H = 900;
 
 // Renders a Copilot-generated wireframe (raw HTML) inside a sandboxed iframe,
 // wrapped in browser chrome so it reads as a "page". Supports fit-to-width (zoom
-// out to see everything) and actual-size (scroll around) modes.
+// out to see everything), actual-size (scroll around), and an in-place "View
+// change" zoom that focuses each data-ff-new change without scrolling.
 function GeneratedFrame({ html, kind, url }) {
   const isAfter = kind === 'after';
   const wrapRef = useRef(null);
@@ -351,6 +366,19 @@ function GeneratedFrame({ html, kind, url }) {
     return isAfter ? injectChangeMarkers(linksSafe) : linksSafe;
   }, [html, isAfter]);
 
+<<<<<<< HEAD
+=======
+  // When the document changes (e.g. the user refines the design), drop any active
+  // zoom/focus so we never keep a stale transform pointing at an element that no
+  // longer exists. The iframe reloads and handleIframeLoad recounts the changes.
+  useEffect(() => {
+    setFocused(false);
+    setFocusTransform('none');
+    changeIdxRef.current = 0;
+    showIdxRef.current = 0;
+  }, [safeHtml]);
+
+>>>>>>> origin/main
   // Read the change-marked elements out of the (same-origin) iframe document.
   const readChanges = useCallback(() => {
     try {
@@ -537,10 +565,44 @@ function GeneratedFrame({ html, kind, url }) {
 
 export default function WireframeView() {
   const { id } = useParams();
-  // Dashboards are keyed by website now, so a solution id resolves to its website,
-  // live URL and fix metadata — no URL input needed.
-  const ctx = useMemo(() => resolveWireframeContext(id), [id]);
+  const location = useLocation();
+  const { websites } = useWebsites();
+  // Curated solution ids (sol-xxx) resolve from mockData. Otherwise `id` is a
+  // pain-point id: use the context passed via navigation state, or fetch the
+  // pain point and look up its website's live URL.
+  const curatedCtx = useMemo(() => resolveWireframeContext(id), [id]);
+  const stateCtx = useMemo(
+    () =>
+      location.state?.painPoint
+        ? buildPainPointWireframeContext(location.state.painPoint, location.state.website)
+        : null,
+    [location.state]
+  );
+  const [ppCtx, setPpCtx] = useState(null);
+  const [resolving, setResolving] = useState(false);
+  const ctx = curatedCtx || stateCtx || ppCtx;
   const staticWireframe = wireframes[id]; // optional curated fallback / annotations
+
+  useEffect(() => {
+    if (curatedCtx || stateCtx) return undefined; // context already known
+    let active = true;
+    setResolving(true);
+    fetchPainPoints()
+      .then(({ painPoints }) => {
+        if (!active) return;
+        const pp = painPoints.find((p) => p.id === id);
+        if (!pp) return;
+        const website = websites.find((w) => w.id === pp.websiteId);
+        setPpCtx(buildPainPointWireframeContext(pp, website));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setResolving(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, curatedCtx, stateCtx, websites]);
 
   const [view, setView] = useState('comparison'); // 'comparison', 'before', 'after'
   const [showShareMenu, setShowShareMenu] = useState(false);
@@ -553,6 +615,31 @@ export default function WireframeView() {
   const [beforeError, setBeforeError] = useState('');
   const [afterLoading, setAfterLoading] = useState(false);
   const [afterError, setAfterError] = useState('');
+
+  // Before panel can show the reconstructed wireframe OR a live screenshot of the
+  // real page. The screenshot is fetched lazily the first time "Live page" is picked.
+  const [beforeMode, setBeforeMode] = useState('wireframe'); // 'wireframe' | 'live'
+  const [shot, setShot] = useState('');
+  const [shotLoading, setShotLoading] = useState(false);
+  const [shotError, setShotError] = useState('');
+
+  // Pain point + website name powering the dev-prompt handoff. For pain-point
+  // routes it comes via nav state; for curated solution ids we synthesize one.
+  const website = useMemo(
+    () => (ctx ? websites.find((w) => w.id === ctx.websiteId) : null),
+    [ctx, websites]
+  );
+  const websiteName = location.state?.website?.name || website?.name || '';
+  const devPainPoint = useMemo(() => {
+    if (location.state?.painPoint) return location.state.painPoint;
+    if (!ctx) return null;
+    return {
+      id: `wf-${id}`,
+      title: ctx.title,
+      summary: ctx.painPointSummary || ctx.description,
+      rootCause: ctx.description,
+    };
+  }, [location.state, ctx, id]);
 
   // Live elapsed-time timer for the on-the-fly generation (ms).
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -589,7 +676,41 @@ export default function WireframeView() {
     };
   }, [ctx, afterCacheKey]);
 
-  const handleGenerate = useCallback(async () => {
+  // Lazily capture the live page the first time the "Live page" toggle is used.
+  // A ref guards against re-entry: shot/shotLoading must NOT be in the dep array,
+  // or setShotLoading(true) would re-run this effect and its cleanup would abort
+  // the in-flight request (leaving it stuck on "Capturing…").
+  const shotStartedRef = useRef(false);
+  useEffect(() => {
+    shotStartedRef.current = false; // a new context can capture afresh
+    setShot('');
+    setShotError('');
+  }, [ctx]);
+  useEffect(() => {
+    if (beforeMode !== 'live' || !ctx || shotStartedRef.current) return undefined;
+    shotStartedRef.current = true;
+    let active = true;
+    setShotLoading(true);
+    setShotError('');
+    fetchScreenshot(ctx.websiteId, ctx.url)
+      .then((data) => {
+        if (active) setShot(data.image || '');
+      })
+      .catch((err) => {
+        if (active) {
+          setShotError(err.message || 'Could not capture the live page.');
+          shotStartedRef.current = false; // allow a retry on next toggle
+        }
+      })
+      .finally(() => {
+        if (active) setShotLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [beforeMode, ctx]);
+
+  const handleGenerate = useCallback(async (refinement) => {
     if (!ctx) return;
     setAfterLoading(true);
     setAfterError('');
@@ -604,6 +725,7 @@ export default function WireframeView() {
         painPointSummary: ctx.painPointSummary,
         fixTitle: ctx.title,
         fixDescription: ctx.description,
+        refinement: typeof refinement === 'string' ? refinement : '',
       });
       if (data.before) setBefore(data.before);
       setAfter(data.after || '');
@@ -649,6 +771,14 @@ export default function WireframeView() {
   };
 
   if (!ctx) {
+    if (resolving) {
+      return (
+        <div className="max-w-4xl mx-auto px-6 py-20 text-center">
+          <RefreshCw className="w-7 h-7 text-indigo-400 mx-auto mb-3 animate-spin" />
+          <p className="text-sm text-gray-400">Loading wireframe…</p>
+        </div>
+      );
+    }
     return (
       <div className="max-w-4xl mx-auto px-6 py-20 text-center">
         <h2 className="text-xl text-white">Wireframe not found</h2>
@@ -657,8 +787,51 @@ export default function WireframeView() {
     );
   }
 
-  // Before panel: generated frame when available, else the curated mock / states.
+  // Before panel: live screenshot OR reconstructed wireframe, with a toggle.
+  const renderLiveShot = () => {
+    if (shotLoading) {
+      return (
+        <div className="rounded-xl border-2 border-red-500/30 bg-gray-900 h-[300px] flex items-center justify-center">
+          <div className="text-center">
+            <RefreshCw className="w-7 h-7 text-red-400/80 mx-auto mb-3 animate-spin" />
+            <p className="text-sm text-gray-300">Capturing the live page…</p>
+          </div>
+        </div>
+      );
+    }
+    if (shot) {
+      return (
+        <div className="rounded-xl border-2 border-red-500/40 overflow-hidden">
+          <div className="bg-gray-800 px-4 py-2 flex items-center gap-2 border-b border-gray-700">
+            <div className="flex gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-red-500/60" />
+              <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
+              <div className="w-3 h-3 rounded-full bg-green-500/60" />
+            </div>
+            <div className="flex-1 mx-3 min-w-0">
+              <div className="bg-gray-700 rounded-md px-3 py-1 text-xs text-gray-400 truncate flex items-center gap-1.5">
+                <span className="text-gray-500">🔒</span> {ctx.url || 'live page'}
+              </div>
+            </div>
+          </div>
+          <div className="overflow-auto bg-white" style={{ height: 460 }}>
+            <img src={shot} alt="Live page" className="w-full block" />
+          </div>
+          <div className="px-4 py-2 text-xs font-medium flex items-center gap-2 bg-red-500/10 text-red-400">
+            <span>📸 Live page — actual current screenshot</span>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="rounded-xl border-2 border-red-500/30 bg-gray-900 h-[300px] flex items-center justify-center text-sm text-gray-500 px-6 text-center">
+        {shotError || 'Could not capture the live page.'}
+      </div>
+    );
+  };
+
   const renderBefore = () => {
+    if (beforeMode === 'live') return renderLiveShot();
     if (before) return <GeneratedFrame html={before} kind="before" url={ctx.url} />;
     if (beforeLoading) {
       return (
@@ -677,6 +850,26 @@ export default function WireframeView() {
       </div>
     );
   };
+
+  // Small toggle for the Before panel: reconstructed wireframe vs live screenshot.
+  const beforeModeToggle = (
+    <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-0.5 border border-gray-700">
+      {[
+        { id: 'wireframe', label: 'Wireframe', Icon: LayoutTemplate },
+        { id: 'live', label: 'Live page', Icon: ImageIcon },
+      ].map(({ id: mid, label, Icon }) => (
+        <button
+          key={mid}
+          onClick={() => setBeforeMode(mid)}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors
+            ${beforeMode === mid ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`}
+        >
+          <Icon className="w-3 h-3" />
+          {label}
+        </button>
+      ))}
+    </div>
+  );
 
   // After panel: generated frame when available, else a prompt to generate.
   const renderAfter = () => {
@@ -723,6 +916,11 @@ export default function WireframeView() {
             {afterLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
             {afterLoading ? 'Generating…' : hasAfter ? 'Regenerate' : 'Generate'}
           </button>
+
+          {/* Dev handoff prompt (Copilot / Claude / Cursor) */}
+          {devPainPoint && (
+            <DevPromptButton painPoint={devPainPoint} websiteName={websiteName} url={ctx.url} />
+          )}
 
           {/* View toggle */}
           <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-1 border border-gray-700">
@@ -817,9 +1015,12 @@ export default function WireframeView() {
       {view === 'comparison' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <AlertCircle className="w-4 h-4 text-red-400" />
-              <span className="text-sm font-medium text-red-300">Current (Problem)</span>
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400" />
+                <span className="text-sm font-medium text-red-300">Current (Problem)</span>
+              </div>
+              {beforeModeToggle}
             </div>
             {renderBefore()}
           </div>
@@ -829,12 +1030,37 @@ export default function WireframeView() {
               <span className="text-sm font-medium text-green-300">Proposed (Solution)</span>
             </div>
             {renderAfter()}
+            {hasAfter && (
+              <RefineBox
+                accent="green"
+                loading={afterLoading}
+                onRefine={handleGenerate}
+                placeholder='Describe what to change, e.g. "place the gear icon in the top-right header, not a dropdown"'
+              />
+            )}
           </div>
         </div>
       )}
 
-      {view === 'before' && <div className="max-w-3xl mx-auto mb-8">{renderBefore()}</div>}
-      {view === 'after' && <div className="max-w-3xl mx-auto mb-8">{renderAfter()}</div>}
+      {view === 'before' && (
+        <div className="max-w-3xl mx-auto mb-8">
+          <div className="flex justify-end mb-3">{beforeModeToggle}</div>
+          {renderBefore()}
+        </div>
+      )}
+      {view === 'after' && (
+        <div className="max-w-3xl mx-auto mb-8">
+          {renderAfter()}
+          {hasAfter && (
+            <RefineBox
+              accent="green"
+              loading={afterLoading}
+              onRefine={handleGenerate}
+              placeholder='Describe what to change, e.g. "place the gear icon in the top-right header, not a dropdown"'
+            />
+          )}
+        </div>
+      )}
 
       {/* Design annotations (curated context, when available) */}
       {staticWireframe?.annotations && (

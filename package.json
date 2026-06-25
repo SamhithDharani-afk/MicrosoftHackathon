@@ -8,6 +8,7 @@
     "dev:client": "vite",
     "server": "node server/index.js",
     "pregen": "node server/pregen.js",
+    "demo": "node demo-site/serve.mjs",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"

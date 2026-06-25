@@ -16,7 +16,7 @@
 // from here, passing in the shared SQLite database instance.
 
 import { spawn, execSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, unlinkSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -42,6 +42,17 @@ const ASSETS_DIR = path.join(__dirname, '..', 'src', 'assets');
 export function localScreenshotPath(screenshotAsset) {
   if (!screenshotAsset) return '';
   const p = path.join(ASSETS_DIR, screenshotAsset);
+  return existsSync(p) ? p : '';
+}
+
+// Resolve a website's bundled "before" HTML asset (e.g. 'ms-support-before.html')
+// to an absolute path under src/assets, or '' if not set / missing. When present
+// this curated HTML is used directly as the BEFORE document — no live screenshot
+// and no vision reproduction needed. This is the reliable path for pages that
+// block headless browsers (login walls / anti-bot), like support.microsoft.com.
+export function localHtmlPath(htmlAsset) {
+  if (!htmlAsset) return '';
+  const p = path.join(ASSETS_DIR, htmlAsset);
   return existsSync(p) ? p : '';
 }
 
@@ -213,11 +224,70 @@ export function ensureWireframeTable(db) {
       created_at   TEXT NOT NULL
     );
   `);
+  // Live-page screenshots are cached separately (as base64 data URLs) so showing
+  // the real page in the "Before" toggle never re-screenshots on every view.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wireframe_screenshots (
+      website_id   TEXT PRIMARY KEY,
+      url          TEXT,
+      data_url     TEXT NOT NULL,
+      created_at   TEXT NOT NULL
+    );
+  `);
 }
 
 export function getCachedBefore(db, websiteId) {
   const row = db.prepare('SELECT before_html, url FROM wireframes WHERE website_id = ?').get(websiteId);
   return row && row.before_html ? { before: row.before_html, url: row.url || '' } : null;
+}
+
+export function getCachedScreenshot(db, websiteId) {
+  const row = db
+    .prepare('SELECT data_url, url FROM wireframe_screenshots WHERE website_id = ?')
+    .get(websiteId);
+  return row && row.data_url ? { dataUrl: row.data_url, url: row.url || '' } : null;
+}
+
+// Capture (or read) a PNG of the live page and return it as a base64 data URL,
+// cached in SQLite per website so we screenshot at most once. A bundled local
+// image (e.g. viva.png) is preferred over a live screenshot — it represents the
+// real page without a login wall and is instant. Throws when neither source is
+// available so the caller can surface a clear error.
+export async function getOrCreateScreenshot(db, { websiteId, url, imagePath, refresh }) {
+  if (!refresh) {
+    const cached = getCachedScreenshot(db, websiteId);
+    if (cached) return cached.dataUrl;
+  }
+  let shot = '';
+  let isTemp = false;
+  if (imagePath && existsSync(imagePath)) {
+    shot = imagePath; // bundled asset — do not delete it afterwards
+  } else if (url) {
+    shot = await screenshotUrl(url);
+    isTemp = !!shot;
+  }
+  if (!shot) {
+    throw new Error(
+      `Could not capture the live page for ${url || 'this website'} (no bundled image and the page may be unreachable or blocking us).`
+    );
+  }
+  try {
+    const dataUrl = `data:image/png;base64,${readFileSync(shot).toString('base64')}`;
+    db.prepare(`
+      INSERT INTO wireframe_screenshots (website_id, url, data_url, created_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(website_id) DO UPDATE SET url = excluded.url, data_url = excluded.data_url, created_at = excluded.created_at
+    `).run(websiteId, url || '', dataUrl, new Date().toISOString());
+    return dataUrl;
+  } finally {
+    if (isTemp) {
+      try {
+        unlinkSync(shot);
+      } catch {
+        // temp file cleanup is best-effort
+      }
+    }
+  }
 }
 
 // Screenshot the live URL (or use a bundled local image) and reproduce it as
@@ -256,11 +326,19 @@ async function generateBefore({ url, imagePath }) {
 }
 
 // Return the cached BEFORE for a website, generating + caching it on first use.
-export async function getOrCreateBefore(db, { websiteId, url, imagePath }) {
+// A bundled curated HTML asset (htmlPath), when provided, is used verbatim as the
+// BEFORE — skipping the screenshot + vision step entirely. This makes wireframes
+// reliable for pages that block headless capture (e.g. support.microsoft.com).
+export async function getOrCreateBefore(db, { websiteId, url, imagePath, htmlPath }) {
   const cached = getCachedBefore(db, websiteId);
   if (cached) return cached.before;
-  if (!url && !imagePath) throw new Error(`No URL or screenshot configured for website "${websiteId}".`);
-  const before = await generateBefore({ url, imagePath });
+  let before;
+  if (htmlPath && existsSync(htmlPath)) {
+    before = readFileSync(htmlPath, 'utf8');
+  } else {
+    if (!url && !imagePath) throw new Error(`No URL or screenshot configured for website "${websiteId}".`);
+    before = await generateBefore({ url, imagePath });
+  }
   db.prepare(`
     INSERT INTO wireframes (website_id, url, before_html, created_at)
     VALUES (?, ?, ?, ?)
@@ -270,8 +348,80 @@ export async function getOrCreateBefore(db, { websiteId, url, imagePath }) {
 }
 
 // Deterministic fallback: if the model did not tag the change with data-ff-new,
-// diff the AFTER against the BEFORE and tag the first opening tag on a line that is
-// new/changed in the AFTER. Guarantees the UI always has a change anchor to point at.
+// diff the AFTER against the BEFORE and tag the element that changed so the UI always
+// has a "NEW" arrow anchor. Pass 1 tags the first changed VISIBLE element line (new or
+// modified markup, incl. inline style/size changes on the element's own tag). Pass 2
+// covers CSS-only changes (e.g. resizing a logo via a <style> rule, where no element
+// line differs) by finding the selector whose declarations changed and tagging the
+// first element it matches.
+// Structural / non-rendered tags are skipped: a marker on <html>/<head>/<meta>/etc.
+// is invisible, which is what made the "NEW" arrow seem to disappear.
+const NON_VISIBLE_TAGS = new Set([
+  'html', 'head', 'body', 'meta', 'link', 'style', 'title', 'script', 'base', 'noscript',
+]);
+
+function escapeRe(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Build a regex that matches the opening tag of the first element a CSS selector
+// targets, preferring id, then class, then a (visible) tag name. Returns null when
+// the selector has no usable simple part.
+function selectorMatcher(selector) {
+  const last = selector.split(',')[0].trim().split(/[\s>+~]+/).filter(Boolean).pop() || '';
+  const id = last.match(/#([\w-]+)/);
+  if (id) {
+    return new RegExp(`<[a-zA-Z][\\w-]*[^>]*\\bid\\s*=\\s*["']${escapeRe(id[1])}["'][^>]*>`, 'i');
+  }
+  const cls = last.match(/\.([\w-]+)/);
+  if (cls) {
+    return new RegExp(
+      `<[a-zA-Z][\\w-]*[^>]*\\bclass\\s*=\\s*["'][^"']*\\b${escapeRe(cls[1])}\\b[^"']*["'][^>]*>`,
+      'i'
+    );
+  }
+  const tag = last.match(/^([a-zA-Z][\w-]*)$/);
+  if (tag && !NON_VISIBLE_TAGS.has(tag[1].toLowerCase())) {
+    return new RegExp(`<${escapeRe(tag[1])}(\\s[^>]*)?>`, 'i');
+  }
+  return null;
+}
+
+// Pass 2: tag the element whose CSS changed. Best-effort; returns the tagged HTML or
+// null when no confident match is found.
+function tagByChangedCss(before, after) {
+  const beforeLines = new Set(String(before).split(/\r?\n/).map((l) => l.trim()));
+  const lines = String(after).split(/\r?\n/);
+  let inStyle = false;
+  let currentSelector = '';
+  const selectors = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (/<style[\s>]/i.test(line)) inStyle = true;
+    if (inStyle) {
+      const sel = line.replace(/^<style[^>]*>/i, '').match(/^([^{}]+)\{/);
+      if (sel) currentSelector = sel[1].trim();
+      if (line && !beforeLines.has(line) && currentSelector) selectors.push(currentSelector);
+    }
+    if (/<\/style>/i.test(line)) {
+      inStyle = false;
+      currentSelector = '';
+    }
+  }
+  for (const selector of selectors) {
+    const matcher = selectorMatcher(selector);
+    if (!matcher) continue;
+    let done = false;
+    const out = String(after).replace(matcher, (m) => {
+      if (done || /data-ff-new/i.test(m)) return m;
+      done = true;
+      return m.replace(/^<([a-zA-Z][\w-]*)/, '<$1 data-ff-new="true"');
+    });
+    if (done) return out;
+  }
+  return null;
+}
+
 function ensureChangeMarker(before, after) {
   if (/data-ff-new/i.test(after)) return after;
   const beforeLines = new Set(String(before).split(/\r?\n/).map((l) => l.trim()));
@@ -279,25 +429,46 @@ function ensureChangeMarker(before, after) {
   for (let i = 0; i < afterLines.length; i += 1) {
     const trimmed = afterLines[i].trim();
     if (!trimmed || beforeLines.has(trimmed)) continue;
-    // Tag the first opening tag on this changed line (skip closing tags / comments).
-    const replaced = afterLines[i].replace(/<([a-zA-Z][\w-]*)((?:\s[^>]*?)?)(\/?)>/, (m, tag, attrs, selfClose) => {
-      if (/data-ff-new/i.test(m)) return m;
-      return `<${tag}${attrs} data-ff-new="true"${selfClose}>`;
-    });
-    if (replaced !== afterLines[i]) {
-      afterLines[i] = replaced;
+    const line = afterLines[i];
+    // Tag the first VISIBLE opening tag on this changed line. We scan past any
+    // structural tags (html/head/body/…) that may share the line so the marker
+    // never lands on something that renders nothing (which looks like a missing arrow).
+    const tagRe = /<([a-zA-Z][\w-]*)((?:\s[^>]*?)?)(\/?)>/g;
+    let m;
+    let newLine = null;
+    while ((m = tagRe.exec(line)) !== null) {
+      const [full, tag, attrs, selfClose] = m;
+      if (NON_VISIBLE_TAGS.has(tag.toLowerCase())) continue;
+      if (/data-ff-new/i.test(full)) {
+        newLine = line; // already tagged on this line — nothing to do
+        break;
+      }
+      newLine =
+        line.slice(0, m.index) +
+        `<${tag}${attrs} data-ff-new="true"${selfClose}>` +
+        line.slice(m.index + full.length);
+      break;
+    }
+    if (newLine && newLine !== line) {
+      afterLines[i] = newLine;
       return afterLines.join('\n');
     }
   }
+  // No element line changed — the fix was likely CSS-only (e.g. a resize). Try to
+  // anchor the marker via the changed CSS selector.
+  const cssTagged = tagByChangedCss(before, after);
+  if (cssTagged) return cssTagged;
   return after;
 }
 
 // Apply ONLY the proposed fix to the cached BEFORE html, on the fly, returning
-// both documents so the UI can show a before/after pair.
-export async function applyFix(db, { websiteId, url, imagePath, painPointSummary, fixTitle, fixDescription }) {
-  const before = await getOrCreateBefore(db, { websiteId, url, imagePath });
+// both documents so the UI can show a before/after pair. An optional `refinement`
+// note (from the user, e.g. "put the gear top-right, not in a menu") is layered on
+// top of the base fix so they can correct a wrong result without starting over.
+export async function applyFix(db, { websiteId, url, imagePath, htmlPath, painPointSummary, fixTitle, fixDescription, refinement }) {
+  const before = await getOrCreateBefore(db, { websiteId, url, imagePath, htmlPath });
   const stdout = await runCopilot(
-    buildAfterPrompt({ beforeHtml: before, painPointSummary, fixTitle, fixDescription })
+    buildAfterPrompt({ beforeHtml: before, painPointSummary, fixTitle, fixDescription, refinement })
   );
   const after = cleanHtml(extractAnswer(stdout));
   if (!after) throw new Error('Model returned no HTML for the proposed change.');

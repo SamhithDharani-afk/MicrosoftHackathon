@@ -1,5 +1,5 @@
-import { useParams, Link } from 'react-router-dom';
-import { useCallback } from 'react';
+import { useParams, useLocation, Link } from 'react-router-dom';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -9,30 +9,131 @@ import {
   useEdgesState,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, RefreshCw, AlertTriangle } from 'lucide-react';
 import { processFlows } from '../data/mockData';
+<<<<<<< HEAD
 import { resolveWireframeContext } from '../utils/wireframeContext';
 import FlowNode from '../components/FlowNode';
 import AIPromptPanel from '../components/AIPromptPanel';
+=======
+import { buildProcessFlow } from '../data/flowLayout';
+import { fetchPainPoints, generateProcessFlow } from '../utils/api';
+import FlowNode from '../components/FlowNode';
+import RefineBox from '../components/RefineBox';
+>>>>>>> origin/main
 
 const nodeTypes = { custom: FlowNode };
 
 export default function ProcessFlowView() {
   const { id } = useParams();
-  const flow = processFlows[id];
+  const location = useLocation();
 
-  if (!flow) {
+  const [flow, setFlow] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [refining, setRefining] = useState(false);
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  // Remember the resolved pain point so "Refine" can regenerate with a note.
+  const ppRef = useRef(null);
+
+  const applyGenerated = useCallback(
+    (built) => {
+      setFlow(built);
+      setNodes(built.nodes);
+      setEdges(built.edges);
+    },
+    [setNodes, setEdges]
+  );
+
+  // Curated solution ids (sol-xxx) come straight from mockData; pain-point ids
+  // are generated (and cached) by the model from the pain point's content.
+  useEffect(() => {
+    let active = true;
+    const staticFlow = processFlows[id];
+    if (staticFlow) {
+      setFlow(staticFlow);
+      setNodes(staticFlow.nodes);
+      setEdges(staticFlow.edges);
+      setError('');
+      setLoading(false);
+      return undefined;
+    }
+    setLoading(true);
+    setError('');
+    setFlow(null);
+    (async () => {
+      try {
+        let pp = location.state?.painPoint;
+        const websiteName = location.state?.website?.name;
+        if (!pp) {
+          const { painPoints } = await fetchPainPoints();
+          pp = painPoints.find((p) => p.id === id);
+        }
+        if (!pp) throw new Error('Pain point not found');
+        ppRef.current = { pp, websiteName };
+        const built = buildProcessFlow(await generateProcessFlow(pp, websiteName));
+        if (!active) return;
+        applyGenerated(built);
+      } catch (e) {
+        if (active) setError(e.message || 'Failed to generate process flow');
+      } finally {
+        if (active) setLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+    // setNodes/setEdges are stable; re-run only when the id changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const handleRefine = useCallback(
+    async (note) => {
+      const ctx = ppRef.current;
+      if (!ctx) return;
+      setRefining(true);
+      setError('');
+      try {
+        const built = buildProcessFlow(
+          await generateProcessFlow(ctx.pp, ctx.websiteName, note)
+        );
+        applyGenerated(built);
+      } catch (e) {
+        setError(e.message || 'Failed to refine process flow');
+      } finally {
+        setRefining(false);
+      }
+    },
+    [applyGenerated]
+  );
+
+  if (loading) {
     return (
       <div className="max-w-4xl mx-auto px-6 py-20 text-center">
-        <h2 className="text-xl text-white">Process flow not found</h2>
-        <Link to="/dashboard" className="text-indigo-400 hover:underline mt-4 inline-block">← Back to Dashboard</Link>
+        <RefreshCw className="w-8 h-8 text-blue-400 mx-auto mb-4 animate-spin" />
+        <h2 className="text-lg font-semibold text-white mb-1">Generating process flow…</h2>
+        <p className="text-sm text-gray-500">The AI is mapping the before/after journey for this pain point.</p>
       </div>
     );
   }
 
+<<<<<<< HEAD
   const [nodes, , onNodesChange] = useNodesState(flow.nodes);
   const [edges, , onEdgesChange] = useEdgesState(flow.edges);
   const ctx = resolveWireframeContext(id);
+=======
+  if (error || !flow) {
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-20 text-center">
+        <AlertTriangle className="w-7 h-7 text-amber-400 mx-auto mb-3" />
+        <h2 className="text-xl text-white mb-1">Couldn’t build the process flow</h2>
+        <p className="text-sm text-gray-500 mb-4">{error || 'Process flow not found'}</p>
+        <Link to="/dashboard" className="text-indigo-400 hover:underline inline-block">← Back to Dashboard</Link>
+      </div>
+    );
+  }
+>>>>>>> origin/main
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10 animate-fade-in">
@@ -86,22 +187,25 @@ export default function ProcessFlowView() {
       </div>
 
       {/* Summary */}
-      <div className="mt-6 bg-gray-900 border border-gray-800 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-3">Key Improvements</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
-            <p className="text-sm font-medium text-red-400 mb-1">Before</p>
-            <p className="text-xs text-gray-400">4+ clicks, ~10 minutes, high frustration, 5 support tickets/day</p>
-          </div>
-          <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
-            <p className="text-sm font-medium text-green-400 mb-1">After</p>
-            <p className="text-xs text-gray-400">1 click, &lt;2 seconds, zero confusion, minimal support load</p>
-          </div>
-          <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
-            <p className="text-sm font-medium text-blue-400 mb-1">Impact</p>
-            <p className="text-xs text-gray-400">-80% support tickets, ~12 min saved per user, improved satisfaction</p>
+      {flow.generated ? (
+        <div className="mt-6 bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-3">Before → After</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+              <p className="text-sm font-medium text-red-400 mb-1">Before</p>
+              <p className="text-xs text-gray-400">{flow.oldLabel || 'The current, broken experience.'}</p>
+            </div>
+            <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
+              <p className="text-sm font-medium text-green-400 mb-1">After</p>
+              <p className="text-xs text-gray-400">{flow.newLabel || 'The proposed, improved experience.'}</p>
+            </div>
+            <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+              <p className="text-sm font-medium text-blue-400 mb-1">Outcome</p>
+              <p className="text-xs text-gray-400">{flow.outcome || 'A faster, less frustrating journey.'}</p>
+            </div>
           </div>
         </div>
+<<<<<<< HEAD
       </div>
 
       {/* Embedded AI prompt helper — turn this flow change into a copy-paste dev prompt */}
@@ -115,6 +219,36 @@ export default function ProcessFlowView() {
           description: ctx?.description || flow.description,
         }}
       />
+=======
+      ) : (
+        <div className="mt-6 bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-3">Key Improvements</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+              <p className="text-sm font-medium text-red-400 mb-1">Before</p>
+              <p className="text-xs text-gray-400">4+ clicks, ~10 minutes, high frustration, 5 support tickets/day</p>
+            </div>
+            <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
+              <p className="text-sm font-medium text-green-400 mb-1">After</p>
+              <p className="text-xs text-gray-400">1 click, &lt;2 seconds, zero confusion, minimal support load</p>
+            </div>
+            <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
+              <p className="text-sm font-medium text-blue-400 mb-1">Impact</p>
+              <p className="text-xs text-gray-400">-80% support tickets, ~12 min saved per user, improved satisfaction</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refine — only for AI-generated flows (curated demo flows are fixed). */}
+      {flow.generated && (
+        <RefineBox
+            loading={refining}
+            onRefine={handleRefine}
+            placeholder='Describe what to change, e.g. "the old path should have 4 steps and mention the search bar"'
+        />
+      )}
+>>>>>>> origin/main
     </div>
   );
 }

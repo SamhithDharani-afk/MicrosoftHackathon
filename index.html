@@ -8,6 +8,19 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <title>FeedbackFlow — Turn Feedback Into Visual Solutions</title>
+    <script>
+      // Apply the saved theme before paint to avoid a dark/light flash.
+      // Mirrors getInitialTheme() in src/context/ThemeContext.jsx.
+      (function () {
+        try {
+          var t = localStorage.getItem('feedbackflow_theme');
+          if (t !== 'light' && t !== 'dark') {
+            t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+          }
+          if (t === 'light') document.documentElement.classList.add('light');
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { MessageSquarePlus, BarChart3, Sparkles, Globe } from 'lucide-react';
+import ThemeToggle from './ThemeToggle';
 
 export default function Layout() {
   const location = useLocation();
@@ -37,6 +38,8 @@ export default function Layout() {
                 {label}
               </Link>
             ))}
+            <div className="w-px h-6 bg-gray-700 mx-2" />
+            <ThemeToggle />
           </div>
         </div>
       </nav>
