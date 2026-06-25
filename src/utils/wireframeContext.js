@@ -23,3 +23,22 @@ export function resolveWireframeContext(solutionId) {
   }
   return null;
 }
+
+// Build the same context shape directly from a pain point + its website, for
+// AI-clustered pain points that have no curated solution id. Lets the wireframe
+// viewer work for ANY pain point on ANY website (the server generates the
+// before/after from the live URL + this fix description).
+export function buildPainPointWireframeContext(painPoint, website) {
+  if (!painPoint) return null;
+  return {
+    websiteId: painPoint.websiteId,
+    url: website?.url || '',
+    websiteName: website?.name || '',
+    painPointSummary: painPoint.summary || '',
+    title: `Proposed fix: ${painPoint.title || 'design change'}`,
+    description:
+      painPoint.rootCause ||
+      painPoint.summary ||
+      'Propose and apply a concrete UI fix for this pain point.',
+  };
+}

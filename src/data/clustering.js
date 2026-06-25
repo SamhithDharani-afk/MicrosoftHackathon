@@ -6,11 +6,15 @@
 // maps to a curated pain point for the same website, we reuse that pain point's
 // rich title / summary / root cause / solutions so the bespoke wireframes and
 // walkthroughs keep working. Otherwise an "emergent" pain point is generated.
+//
+// This keyword clusterer is the deterministic FALLBACK. The real-AI coalescer
+// (server/coalesce-service.js) produces the same pain-point shape via the shared
+// builders below, so the two paths are interchangeable.
 // ──────────────────────────────────────────────────────────────
 
 // Topics ordered by specificity. `curated` references a curated pain point id
 // in mockData; it is only reused when that pain point belongs to the website.
-const TOPICS = [
+export const TOPICS = [
   { key: 'settings-discovery', label: 'finding settings & preferences', curated: 'pp-001',
     keywords: ['setting', 'settings', 'gear', 'preference', 'preferences', 'configure', 'profile picture', 'notification preference'] },
   { key: 'search', label: 'search quality', curated: 'pp-002',
@@ -55,16 +59,77 @@ function pickTopic(entry) {
   return best || FALLBACK_TOPIC;
 }
 
-function severityFor(impactScore) {
+export function severityFor(impactScore) {
   if (impactScore >= 75) return 'critical';
   if (impactScore >= 50) return 'high';
   if (impactScore >= 30) return 'medium';
   return 'low';
 }
 
-function truncate(str, n = 140) {
+export function truncate(str, n = 140) {
   if (!str) return '';
   return str.length > n ? `${str.slice(0, n - 1).trim()}…` : str;
+}
+
+// Deterministic metrics shared by the heuristic and AI clustering paths, so a
+// pain point's impact/severity never depends on which clusterer produced it.
+export function painPointMetrics(items) {
+  const count = items.length;
+  const avgRating = items.reduce((s, f) => s + (f.rating ?? 3), 0) / count;
+  const impactScore = Math.max(
+    0,
+    Math.min(99, Math.round(count * 14 + (avgRating - 1) * 12))
+  );
+  const departments = [...new Set(items.map((f) => f.department).filter(Boolean))];
+  const relatedFeedback = items.map((f) => f.id);
+  return { count, avgRating, impactScore, departments, relatedFeedback };
+}
+
+// Build a pain point that reuses a curated pain point's rich content.
+export function curatedPainPoint({ curated, websiteId, items }) {
+  const { count, impactScore, departments, relatedFeedback } = painPointMetrics(items);
+  return {
+    id: curated.id,
+    websiteId,
+    title: curated.title,
+    severity: severityFor(impactScore),
+    mentionCount: count,
+    impactScore,
+    departments: departments.length ? departments : curated.departments,
+    summary: curated.summary,
+    rootCause: curated.rootCause,
+    relatedFeedback,
+    solutions: curated.solutions || [],
+    derived: false,
+  };
+}
+
+// Build an "emergent" pain point. title / summary / rootCause may be supplied by
+// the AI coalescer; when absent we fall back to deterministic text so the
+// heuristic path produces exactly the same output it always has.
+export function emergentPainPoint({ websiteId, key, label, items, title, summary, rootCause }) {
+  const { count, impactScore, departments, relatedFeedback } = painPointMetrics(items);
+  const sample = items.slice().sort((a, b) => (b.rating ?? 3) - (a.rating ?? 3))[0];
+  const labelText = label || 'general usability';
+  const titleLabel = labelText.replace(/(^\w)/, (m) => m.toUpperCase());
+  return {
+    id: `pp-auto-${websiteId}-${key}`,
+    websiteId,
+    title: title || `${titleLabel} (${count} report${count === 1 ? '' : 's'})`,
+    severity: severityFor(impactScore),
+    mentionCount: count,
+    impactScore,
+    departments,
+    summary:
+      summary ||
+      `${count} ${count === 1 ? 'person' : 'people'} reported issues related to ${labelText}. Representative feedback: “${truncate(sample?.text)}”`,
+    rootCause:
+      rootCause ||
+      'Auto-clustered from user feedback. Generate a solution to explore a fix, or review the related submissions for detail.',
+    relatedFeedback,
+    solutions: [],
+    derived: true,
+  };
 }
 
 /**
@@ -86,56 +151,17 @@ export function clusterFeedback(feedback, websiteId, curatedPainPoints = []) {
 
   const painPoints = [];
   for (const { topic, items } of groups.values()) {
-    const count = items.length;
-    const avgRating = items.reduce((s, f) => s + (f.rating ?? 3), 0) / count;
-    const impactScore = Math.max(
-      0,
-      Math.min(99, Math.round(count * 14 + (avgRating - 1) * 12))
-    );
-    const departments = [...new Set(items.map((f) => f.department).filter(Boolean))];
-    const relatedFeedback = items.map((f) => f.id);
-
     // Reuse curated content only when it belongs to this website.
     const curated =
       topic.curated && curatedById.get(topic.curated)?.websiteId === websiteId
         ? curatedById.get(topic.curated)
         : null;
 
-    if (curated) {
-      painPoints.push({
-        id: curated.id,
-        websiteId,
-        title: curated.title,
-        severity: severityFor(impactScore),
-        mentionCount: count,
-        impactScore,
-        departments: departments.length ? departments : curated.departments,
-        summary: curated.summary,
-        rootCause: curated.rootCause,
-        relatedFeedback,
-        solutions: curated.solutions || [],
-        derived: false,
-      });
-    } else {
-      const sample = items
-        .slice()
-        .sort((a, b) => (b.rating ?? 3) - (a.rating ?? 3))[0];
-      const titleLabel = topic.label.replace(/(^\w)/, (m) => m.toUpperCase());
-      painPoints.push({
-        id: `pp-auto-${websiteId}-${topic.key}`,
-        websiteId,
-        title: `${titleLabel} (${count} report${count === 1 ? '' : 's'})`,
-        severity: severityFor(impactScore),
-        mentionCount: count,
-        impactScore,
-        departments,
-        summary: `${count} ${count === 1 ? 'person' : 'people'} reported issues related to ${topic.label}. Representative feedback: “${truncate(sample?.text)}”`,
-        rootCause: 'Auto-clustered from user feedback. Generate a solution to explore a fix, or review the related submissions for detail.',
-        relatedFeedback,
-        solutions: [],
-        derived: true,
-      });
-    }
+    painPoints.push(
+      curated
+        ? curatedPainPoint({ curated, websiteId, items })
+        : emergentPainPoint({ websiteId, key: topic.key, label: topic.label, items })
+    );
   }
 
   return painPoints.sort((a, b) => b.impactScore - a.impactScore);

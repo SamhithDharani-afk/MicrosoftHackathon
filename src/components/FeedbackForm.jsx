@@ -1,74 +1,13 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Send, CheckCircle2, ImagePlus, X, Sparkles, MessageCircle, Lightbulb, AlertTriangle, ChevronRight } from 'lucide-react';
 import { useWebsites } from '../context/WebsitesContext';
-import { submitFeedback } from '../utils/api';
+import { submitFeedback, assistFeedback } from '../utils/api';
 import { severityMeta } from '../utils/severity';
 
 // ──────────────────────────────────────────────
-// AI Companion — analyzes feedback text in real-time and gives nudges
+// AI Companion — grades feedback text in real-time with GPT (GitHub Models)
 // ──────────────────────────────────────────────
-
-const NUDGE_RULES = [
-  {
-    id: 'too-short',
-    check: (text) => text.length > 0 && text.length < 40,
-    type: 'warning',
-    message: "Your feedback is a bit short. Try describing **what you were trying to do**, **what happened**, and **what you expected**.",
-  },
-  {
-    id: 'no-specifics',
-    check: (text) => text.length > 30 && !/button|page|screen|menu|tab|icon|link|dropdown|sidebar|header|modal|popup|search|setting/i.test(text),
-    type: 'tip',
-    message: "Try mentioning specific UI elements (e.g., a button, menu, page, or screen) so the AI can generate more accurate wireframes.",
-  },
-  {
-    id: 'no-action',
-    check: (text) => text.length > 30 && !/click|tap|find|open|navigate|access|search|scroll|locate|tried|wanted|looking/i.test(text),
-    type: 'tip',
-    message: "What action were you trying to take? Phrases like *\"I tried to...\"* or *\"I was looking for...\"* help us understand the workflow.",
-  },
-  {
-    id: 'no-outcome',
-    check: (text) => text.length > 50 && !/couldn't|can't|unable|doesn't|didn't|broken|missing|hidden|confusing|frustrated|slow|error|fail|wrong|impossible/i.test(text),
-    type: 'tip',
-    message: "What went wrong? Mentioning the outcome (e.g., *\"couldn't find it\"*, *\"it was hidden\"*, *\"got an error\"*) helps pinpoint the issue.",
-  },
-  {
-    id: 'great-detail',
-    check: (text) => {
-      const hasElement = /button|page|screen|menu|icon|setting|sidebar|header/i.test(text);
-      const hasAction = /click|tap|find|navigate|tried|looking|wanted/i.test(text);
-      const hasOutcome = /couldn't|can't|hidden|confusing|missing|slow|error|broken/i.test(text);
-      return text.length > 60 && hasElement && hasAction && hasOutcome;
-    },
-    type: 'success',
-    message: "Excellent feedback! You've described the element, what you tried, and what went wrong. This gives the AI everything it needs.",
-  },
-  {
-    id: 'has-time',
-    check: (text) => /\d+\s*(min|minute|hour|second)/i.test(text),
-    type: 'success',
-    message: "Great — including time impact helps managers prioritize this issue.",
-  },
-  {
-    id: 'vague',
-    check: (text) => text.length > 20 && /it sucks|bad|terrible|awful|hate it|don't like|not good|ugh/i.test(text) && text.length < 80,
-    type: 'nudge',
-    message: "We hear you! Can you tell us **specifically** what's not working? For example: *\"The settings button is hard to find because...\"*",
-  },
-  {
-    id: 'suggest-screenshot',
-    check: (text, { hasImages }) => text.length > 40 && !hasImages && /see|look|visual|display|layout|ui|design|interface|position/i.test(text),
-    type: 'tip',
-    message: "Since you're describing something visual, attaching a screenshot would really help the AI understand the issue. Use the upload area below!",
-  },
-];
-
-function getActiveNudges(text, context) {
-  if (!text.trim()) return [];
-  return NUDGE_RULES.filter(rule => rule.check(text, context));
-}
 
 // Smart question prompts based on category
 const CATEGORY_PROMPTS = {
@@ -81,39 +20,64 @@ const CATEGORY_PROMPTS = {
 };
 
 function AICompanion({ feedback, category, hasImages, onSuggestInsert }) {
-  const nudges = getActiveNudges(feedback, { hasImages });
   const prompt = CATEGORY_PROMPTS[category] || CATEGORY_PROMPTS['general'];
+  const hasText = !!feedback.trim();
 
-  const feedbackScore = (() => {
-    if (!feedback.trim()) return 0;
-    let score = 0;
-    if (feedback.length > 30) score += 20;
-    if (feedback.length > 80) score += 15;
-    if (/button|page|screen|menu|icon|setting|sidebar|header|tab/i.test(feedback)) score += 20;
-    if (/click|tap|find|navigate|tried|looking|wanted|access/i.test(feedback)) score += 20;
-    if (/couldn't|can't|hidden|confusing|missing|slow|error|broken|unable/i.test(feedback)) score += 15;
-    if (/\d+\s*(min|minute|hour|second)/i.test(feedback)) score += 10;
-    if (hasImages) score += 10;
-    return Math.min(score, 100);
-  })();
+  // Live AI analysis (GitHub Models, via /api/assist): debounced ~400ms with
+  // in-flight cancellation. This is the ONLY source of the quality score, nudges
+  // and suggestions — there is no heuristic grader, so the signals never
+  // flip-flop between two different scorers. The previous AI result stays on
+  // screen while the next one loads, to avoid flicker as the user types.
+  const [ai, setAi] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(false);
+  useEffect(() => {
+    if (!hasText) {
+      setAi(null);
+      setAiLoading(false);
+      setAiError(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setAiLoading(true);
+    setAiError(false);
+    const timer = setTimeout(async () => {
+      try {
+        const r = await assistFeedback({ text: feedback, category, hasImages }, controller.signal);
+        if (controller.signal.aborted) return;
+        if (r && r.ok) {
+          setAi(r);
+        } else {
+          setAi(null);
+          setAiError(true);
+        }
+      } catch (err) {
+        if (err?.name !== 'AbortError') {
+          setAi(null);
+          setAiError(true);
+        }
+      } finally {
+        if (!controller.signal.aborted) setAiLoading(false);
+      }
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [feedback, category, hasImages, hasText]);
+
+  const feedbackScore = ai ? ai.score : 0;
+  const nudges = ai ? ai.nudges : [];
+  const suggestions = ai ? ai.suggestions : [];
 
   const scoreColor = feedbackScore >= 70 ? 'text-green-400' : feedbackScore >= 40 ? 'text-amber-400' : 'text-gray-500';
   const scoreLabel = feedbackScore >= 70 ? 'Great detail' : feedbackScore >= 40 ? 'Getting there' : 'Needs more detail';
 
-  // Quick-insert suggestions based on what's missing
-  const suggestions = [];
-  if (feedback.length > 10 && !/tried|wanted|looking|click/i.test(feedback)) {
-    suggestions.push("I was trying to...");
-  }
-  if (feedback.length > 10 && !/couldn't|can't|hidden|unable|missing/i.test(feedback)) {
-    suggestions.push("but I couldn't find...");
-  }
-  if (feedback.length > 20 && !/should|expect|would be better|instead/i.test(feedback)) {
-    suggestions.push("I expected to see...");
-  }
-  if (feedback.length > 30 && !/\d+\s*(min|minute|second|hour)/i.test(feedback)) {
-    suggestions.push("It took me about __ minutes");
-  }
+  const subtitle = aiLoading
+    ? 'Analyzing your feedback…'
+    : aiError
+    ? 'AI analysis unavailable'
+    : 'AI-powered feedback coaching';
 
   return (
     <div className="space-y-4">
@@ -124,25 +88,48 @@ function AICompanion({ feedback, category, hasImages, onSuggestInsert }) {
         </div>
         <div>
           <span className="text-sm font-semibold text-white">AI Assistant</span>
-          <p className="text-[10px] text-gray-500">Helping you write better feedback</p>
+          <p className="text-[10px] text-gray-500">{subtitle}</p>
         </div>
       </div>
 
-      {/* Feedback quality score */}
-      <div className="bg-gray-800/50 rounded-lg p-3">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-gray-400">Feedback Quality</span>
-          <span className={`text-xs font-semibold ${scoreColor}`}>{scoreLabel}</span>
+      {/* Feedback quality — graded only by the AI (no heuristic fallback) */}
+      {hasText && (
+        <div className="bg-gray-800/50 rounded-lg p-3">
+          {ai ? (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-400">Feedback Quality</span>
+                <span className={`text-xs font-semibold ${scoreColor}`}>{scoreLabel}</span>
+              </div>
+              <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    feedbackScore >= 70 ? 'bg-green-500' : feedbackScore >= 40 ? 'bg-amber-500' : 'bg-gray-500'
+                  }`}
+                  style={{ width: `${feedbackScore}%` }}
+                />
+              </div>
+            </>
+          ) : aiError ? (
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-gray-500 mt-0.5 flex-shrink-0" />
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Couldn't reach the AI grader — your feedback will still be submitted.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-400">Feedback Quality</span>
+                <span className="text-xs text-gray-500 animate-pulse">Analyzing…</span>
+              </div>
+              <div className="relative h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                <div className="animate-indeterminate rounded-full bg-gray-500" />
+              </div>
+            </>
+          )}
         </div>
-        <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${
-              feedbackScore >= 70 ? 'bg-green-500' : feedbackScore >= 40 ? 'bg-amber-500' : 'bg-gray-500'
-            }`}
-            style={{ width: `${feedbackScore}%` }}
-          />
-        </div>
-      </div>
+      )}
 
       {/* Category-specific prompt */}
       {!feedback.trim() && (
@@ -181,7 +168,12 @@ function AICompanion({ feedback, category, hasImages, onSuggestInsert }) {
                 nudge.type === 'success' ? 'text-green-300' : nudge.type === 'warning' ? 'text-amber-300' : nudge.type === 'nudge' ? 'text-orange-300' : 'text-blue-300'
               }`}
               dangerouslySetInnerHTML={{
-                __html: nudge.message.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>')
+                __html: nudge.message
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                  .replace(/\*(.*?)\*/g, '<em>$1</em>')
               }}
             />
           </div>

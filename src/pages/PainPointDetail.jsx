@@ -1,19 +1,47 @@
-import { useParams, Link } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { ArrowLeft, Play, ChevronRight, MessageSquare, AlertCircle } from 'lucide-react';
+import { useParams, useLocation, Link } from 'react-router-dom';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { ArrowLeft, Play, ChevronRight, MessageSquare, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
 import { walkthroughs } from '../data/mockData';
-import { fetchPainPoints, fetchFeedback } from '../utils/api';
+import { fetchPainPoints, fetchFeedback, generateWalkthrough } from '../utils/api';
 import { severityMeta } from '../utils/severity';
+import RefineBox from '../components/RefineBox';
+import DevPromptButton from '../components/DevPromptButton';
 
 export default function PainPointDetail() {
   const { id } = useParams();
+  const location = useLocation();
   const [painPoint, setPainPoint] = useState(undefined); // undefined = loading, null = not found
   const [related, setRelated] = useState([]);
+
+  // AI-generated walkthrough (for pain points without a bundled, curated one).
+  const wantGenerate = location.state?.generate === 'walkthrough';
+  const websiteName = location.state?.website?.name;
+  const websiteUrl = location.state?.website?.url;
+  const [genWalk, setGenWalk] = useState(null);
+  const [walkLoading, setWalkLoading] = useState(false);
+  const [walkError, setWalkError] = useState('');
+  const autoRef = useRef(false);
+
+  const runWalkthrough = useCallback(
+    async (pp, refinement) => {
+      if (!pp) return;
+      setWalkLoading(true);
+      setWalkError('');
+      try {
+        setGenWalk(await generateWalkthrough(pp, websiteName, refinement));
+      } catch (e) {
+        setWalkError(e.message || 'Failed to generate walkthrough');
+      } finally {
+        setWalkLoading(false);
+      }
+    },
+    [websiteName]
+  );
 
   useEffect(() => {
     let active = true;
     fetchPainPoints()
-      .then(async (all) => {
+      .then(async ({ painPoints: all }) => {
         const pp = all.find((p) => p.id === id) || null;
         if (!active) return;
         setPainPoint(pp);
@@ -25,6 +53,17 @@ export default function PainPointDetail() {
       .catch(() => active && setPainPoint(null));
     return () => { active = false; };
   }, [id]);
+
+  // When arriving from the dashboard "Generate Walkthrough" button, auto-generate
+  // for pain points that don't have a curated walkthrough.
+  useEffect(() => {
+    if (!painPoint || autoRef.current) return;
+    const curatedWalk = painPoint.solutions?.find((s) => s.type === 'walkthrough');
+    if (wantGenerate && !curatedWalk) {
+      autoRef.current = true;
+      runWalkthrough(painPoint);
+    }
+  }, [painPoint, wantGenerate, runWalkthrough]);
 
   if (painPoint === undefined) {
     return (
@@ -65,7 +104,12 @@ export default function PainPointDetail() {
         </span>
       </div>
 
-      <h1 className="text-3xl font-bold text-white mb-4">{painPoint.title}</h1>
+      <div className="flex items-start justify-between gap-4 mb-4">
+        <h1 className="text-3xl font-bold text-white">{painPoint.title}</h1>
+        <div className="flex-shrink-0 mt-1">
+          <DevPromptButton painPoint={painPoint} websiteName={websiteName} url={websiteUrl} />
+        </div>
+      </div>
       <p className="text-gray-400 mb-6">{painPoint.summary}</p>
 
       {/* Root cause */}
@@ -181,6 +225,70 @@ export default function PainPointDetail() {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* AI-generated walkthrough — for pain points without a curated one. */}
+      {!walkthrough && (
+        <section className="mb-10">
+          <div className="flex items-center justify-between mb-4 gap-4">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Play className="w-5 h-5 text-green-400" />
+              {genWalk?.title || 'Visual Walkthrough'}
+            </h2>
+            {!genWalk && !walkLoading && (
+              <button
+                onClick={() => runWalkthrough(painPoint)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-green-600 hover:bg-green-500 text-white transition-colors flex-shrink-0"
+              >
+                <Sparkles className="w-4 h-4" />
+                Generate walkthrough
+              </button>
+            )}
+          </div>
+
+          {walkLoading ? (
+            <div className="bg-gray-900 border border-gray-800 rounded-xl p-10 text-center">
+              <RefreshCw className="w-7 h-7 text-green-400 mx-auto mb-3 animate-spin" />
+              <p className="text-sm text-gray-300">Generating a step-by-step walkthrough of the fix…</p>
+            </div>
+          ) : walkError ? (
+            <div className="bg-gray-900 border border-amber-500/30 rounded-xl p-6 text-center">
+              <p className="text-sm text-gray-400 mb-3">{walkError}</p>
+              <button
+                onClick={() => runWalkthrough(painPoint)}
+                className="text-sm text-indigo-400 hover:underline"
+              >
+                Try again
+              </button>
+            </div>
+          ) : genWalk ? (
+            <div className="space-y-4">
+              {genWalk.steps.map((step, i) => (
+                <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl p-6 hover:border-green-500/30 transition-colors">
+                  <div className="flex items-start gap-4">
+                    <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-sm font-bold text-green-400">{i + 1}</span>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-white font-semibold mb-1">{step.title}</h3>
+                      <p className="text-sm text-gray-400">{step.description}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <RefineBox
+                accent="green"
+                loading={walkLoading}
+                onRefine={(note) => runWalkthrough(painPoint, note)}
+                placeholder='Describe what to change, e.g. "add a step about the mobile app" or "make it 3 steps"'
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">
+              Generate a step-by-step guide showing how the proposed fix solves this pain point.
+            </p>
+          )}
         </section>
       )}
 

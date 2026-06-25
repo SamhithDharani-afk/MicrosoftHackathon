@@ -16,7 +16,7 @@
 // from here, passing in the shared SQLite database instance.
 
 import { spawn, execSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, unlinkSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -201,11 +201,70 @@ export function ensureWireframeTable(db) {
       created_at   TEXT NOT NULL
     );
   `);
+  // Live-page screenshots are cached separately (as base64 data URLs) so showing
+  // the real page in the "Before" toggle never re-screenshots on every view.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wireframe_screenshots (
+      website_id   TEXT PRIMARY KEY,
+      url          TEXT,
+      data_url     TEXT NOT NULL,
+      created_at   TEXT NOT NULL
+    );
+  `);
 }
 
 export function getCachedBefore(db, websiteId) {
   const row = db.prepare('SELECT before_html, url FROM wireframes WHERE website_id = ?').get(websiteId);
   return row && row.before_html ? { before: row.before_html, url: row.url || '' } : null;
+}
+
+export function getCachedScreenshot(db, websiteId) {
+  const row = db
+    .prepare('SELECT data_url, url FROM wireframe_screenshots WHERE website_id = ?')
+    .get(websiteId);
+  return row && row.data_url ? { dataUrl: row.data_url, url: row.url || '' } : null;
+}
+
+// Capture (or read) a PNG of the live page and return it as a base64 data URL,
+// cached in SQLite per website so we screenshot at most once. A bundled local
+// image (e.g. viva.png) is preferred over a live screenshot — it represents the
+// real page without a login wall and is instant. Throws when neither source is
+// available so the caller can surface a clear error.
+export async function getOrCreateScreenshot(db, { websiteId, url, imagePath, refresh }) {
+  if (!refresh) {
+    const cached = getCachedScreenshot(db, websiteId);
+    if (cached) return cached.dataUrl;
+  }
+  let shot = '';
+  let isTemp = false;
+  if (imagePath && existsSync(imagePath)) {
+    shot = imagePath; // bundled asset — do not delete it afterwards
+  } else if (url) {
+    shot = await screenshotUrl(url);
+    isTemp = !!shot;
+  }
+  if (!shot) {
+    throw new Error(
+      `Could not capture the live page for ${url || 'this website'} (no bundled image and the page may be unreachable or blocking us).`
+    );
+  }
+  try {
+    const dataUrl = `data:image/png;base64,${readFileSync(shot).toString('base64')}`;
+    db.prepare(`
+      INSERT INTO wireframe_screenshots (website_id, url, data_url, created_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(website_id) DO UPDATE SET url = excluded.url, data_url = excluded.data_url, created_at = excluded.created_at
+    `).run(websiteId, url || '', dataUrl, new Date().toISOString());
+    return dataUrl;
+  } finally {
+    if (isTemp) {
+      try {
+        unlinkSync(shot);
+      } catch {
+        // temp file cleanup is best-effort
+      }
+    }
+  }
 }
 
 // Screenshot the live URL (or use a bundled local image) and reproduce it as
@@ -281,11 +340,13 @@ function ensureChangeMarker(before, after) {
 }
 
 // Apply ONLY the proposed fix to the cached BEFORE html, on the fly, returning
-// both documents so the UI can show a before/after pair.
-export async function applyFix(db, { websiteId, url, imagePath, painPointSummary, fixTitle, fixDescription }) {
+// both documents so the UI can show a before/after pair. An optional `refinement`
+// note (from the user, e.g. "put the gear top-right, not in a menu") is layered on
+// top of the base fix so they can correct a wrong result without starting over.
+export async function applyFix(db, { websiteId, url, imagePath, painPointSummary, fixTitle, fixDescription, refinement }) {
   const before = await getOrCreateBefore(db, { websiteId, url, imagePath });
   const stdout = await runCopilot(
-    buildAfterPrompt({ beforeHtml: before, painPointSummary, fixTitle, fixDescription })
+    buildAfterPrompt({ beforeHtml: before, painPointSummary, fixTitle, fixDescription, refinement })
   );
   const after = cleanHtml(extractAnswer(stdout));
   if (!after) throw new Error('Model returned no HTML for the proposed change.');

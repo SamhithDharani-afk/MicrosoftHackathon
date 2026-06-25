@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Contoso Support Hub</title>
+  <style>
+    :root {
+      --blue: #0f6cbd;
+      --blue-dark: #115ea3;
+      --ink: #242424;
+      --muted: #616161;
+      --line: #e1dfdd;
+      --bg: #faf9f8;
+      --card: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.45;
+    }
+    a { color: var(--blue); text-decoration: none; }
+
+    /* ── Top bar (note: deliberately NO settings gear here) ── */
+    .topbar {
+      height: 48px;
+      background: linear-gradient(90deg, #103a5c 0%, #0f6cbd 100%);
+      display: flex; align-items: center; gap: 16px;
+      padding: 0 16px; color: #fff;
+    }
+    .waffle { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 4px; cursor: pointer; }
+    .waffle:hover { background: rgba(255,255,255,.12); }
+    .waffle div { width: 16px; height: 16px; display: grid; grid-template-columns: repeat(3,1fr); grid-template-rows: repeat(3,1fr); gap: 2px; }
+    .waffle span { background: #cfe3f5; border-radius: 1px; }
+    .brand { font-weight: 600; font-size: 15px; letter-spacing: .2px; }
+    .search {
+      flex: 1; max-width: 520px; margin: 0 auto;
+      background: rgba(255,255,255,.16); border-radius: 4px;
+      display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+      color: #e8f1fb; font-size: 13px;
+    }
+    .top-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+    .icon-btn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 4px; cursor: pointer; font-size: 15px; }
+    .icon-btn:hover { background: rgba(255,255,255,.12); }
+    .avatar { width: 28px; height: 28px; border-radius: 50%; background: #7c4dff; color: #fff; display: grid; place-items: center; font-size: 12px; font-weight: 600; cursor: pointer; margin-left: 4px; }
+
+    /* Avatar dropdown — purposefully has NO "Settings" entry */
+    .menu { position: relative; }
+    .menu-pop {
+      position: absolute; right: 0; top: 36px; width: 220px; background: #fff;
+      border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14);
+      padding: 6px; display: none; z-index: 40;
+    }
+    .menu.open .menu-pop { display: block; }
+    .menu-pop a { display: block; padding: 8px 10px; border-radius: 6px; color: var(--ink); font-size: 13px; }
+    .menu-pop a:hover { background: #f3f2f1; }
+    .menu-head { padding: 10px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+    .menu-head .n { font-weight: 600; font-size: 13px; }
+    .menu-head .e { font-size: 12px; color: var(--muted); }
+
+    /* ── Layout ── */
+    .shell { display: flex; min-height: calc(100vh - 48px); }
+    .side {
+      width: 240px; background: #fff; border-right: 1px solid var(--line);
+      padding: 16px 12px; display: flex; flex-direction: column;
+    }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 6px; font-size: 13px; color: var(--ink); cursor: pointer; }
+    .nav-item:hover { background: #f3f2f1; }
+    .nav-item.active { background: #eaf3fb; color: var(--blue-dark); font-weight: 600; }
+    .nav-sep { height: 1px; background: var(--line); margin: 12px 4px; }
+    .nav-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #8a8886; padding: 6px 12px; }
+
+    .main { flex: 1; padding: 28px 36px; max-width: 1100px; }
+    .crumbs { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    h1 { font-size: 26px; margin: 0 0 4px; }
+    .sub { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+
+    .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+    .card .k { font-size: 12px; color: var(--muted); }
+    .card .v { font-size: 26px; font-weight: 700; margin-top: 4px; }
+    .card .d { font-size: 12px; margin-top: 4px; }
+    .up { color: #107c10; } .down { color: #c50f1f; }
+
+    .panel { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0; margin-bottom: 28px; overflow: hidden; }
+    .panel h2 { font-size: 15px; margin: 0; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 11px 18px; border-bottom: 1px solid #f3f2f1; }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; }
+    tr:last-child td { border-bottom: 0; }
+    .pill { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+    .pill.open { background: #fff4ce; color: #835c00; }
+    .pill.prog { background: #e1f0ff; color: #115ea3; }
+    .pill.done { background: #dff6dd; color: #0e6b0e; }
+
+    .feedback-wrap { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .feedback-wrap .fh { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 14px; cursor: pointer; user-select: none; }
+    .feedback-wrap .fh:hover { background: #f8f9fb; }
+    .feedback-wrap .fh-text { flex: 1; }
+    .feedback-wrap .fh h2 { border: 0; padding: 0; font-size: 15px; margin: 0; }
+    .feedback-wrap .fh p { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+    .feedback-wrap .chev { font-size: 13px; color: var(--muted); transition: transform .2s ease; }
+    .feedback-wrap.collapsed .fh { border-bottom: 0; }
+    .feedback-wrap.collapsed .chev { transform: rotate(-90deg); }
+    .feedback-wrap.collapsed .fh p { display: none; }
+    .feedback-wrap .frame { transition: height .25s ease; overflow: hidden; }
+    .feedback-wrap.collapsed .frame { height: 0 !important; }
+    iframe { display: block; width: 100%; border: 0; }
+
+    /* ── The deliberately-hidden settings entry ──
+       No gear in the header, not in the avatar menu. It is tucked into a tiny,
+       low-contrast "⋯" control at the very bottom of the sidebar. This recreates
+       the "Settings button not discoverable" pain point on purpose. */
+    .more { margin-top: auto; }
+    .more-toggle {
+      font-size: 16px; color: #c8c6c4; padding: 8px 12px; cursor: pointer;
+      user-select: none; line-height: 1; border-radius: 6px; width: max-content;
+    }
+    .more-toggle:hover { color: #a19f9d; }
+    .more-pop { display: none; padding: 4px 0 0; }
+    .more.open .more-pop { display: block; }
+    .more-pop .nav-item { font-size: 12px; color: var(--muted); }
+
+    .foot { font-size: 12px; color: #8a8886; padding: 22px 36px; }
+  </style>
+</head>
+<body>
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="waffle" title="Apps"><div><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div></div>
+    <div class="brand">Contoso Support Hub</div>
+    <div class="search">🔍 <span>Search tickets, articles and people</span></div>
+    <div class="top-actions">
+      <div class="icon-btn" title="Notifications">🔔</div>
+      <div class="icon-btn" title="Messages">💬</div>
+      <div class="icon-btn" title="Help">❓</div>
+      <div class="menu" id="avatarMenu">
+        <div class="avatar" id="avatarBtn">JD</div>
+        <div class="menu-pop">
+          <div class="menu-head">
+            <div class="n">Jordan Diaz</div>
+            <div class="e">jordan.diaz@contoso.com</div>
+          </div>
+          <a href="#">View account</a>
+          <a href="#">My activity</a>
+          <a href="#">Help &amp; feedback</a>
+          <a href="#">Sign out</a>
+          <!-- Note: no "Settings" here, on purpose -->
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <!-- Sidebar -->
+    <nav class="side">
+      <div class="nav-item active">🏠 Home</div>
+      <div class="nav-item">🎫 My tickets</div>
+      <div class="nav-item">📥 Inbox</div>
+      <div class="nav-item">📚 Knowledge base</div>
+      <div class="nav-sep"></div>
+      <div class="nav-label">Teams</div>
+      <div class="nav-item">🟦 IT Helpdesk</div>
+      <div class="nav-item">🟩 Facilities</div>
+      <div class="nav-item">🟧 HR Support</div>
+
+      <!-- Hidden settings: buried under a faint "⋯" at the very bottom -->
+      <div class="more" id="moreMenu">
+        <div class="more-toggle" id="moreToggle" title="More">⋯</div>
+        <div class="more-pop">
+          <div class="nav-item">⚙️ Settings</div>
+          <div class="nav-item">🗄️ Archived</div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="crumbs">Home / Dashboard</div>
+      <h1>Good morning, Jordan 👋</h1>
+      <p class="sub">Here's what's happening across your support queues today.</p>
+
+      <div class="cards">
+        <div class="card"><div class="k">Open tickets</div><div class="v">24</div><div class="d up">▲ 3 since yesterday</div></div>
+        <div class="card"><div class="k">Avg. response</div><div class="v">2.4h</div><div class="d up">▼ 18% this week</div></div>
+        <div class="card"><div class="k">Resolved (7d)</div><div class="v">131</div><div class="d up">▲ 12%</div></div>
+        <div class="card"><div class="k">CSAT</div><div class="v">88%</div><div class="d down">▼ 2 pts</div></div>
+      </div>
+
+      <div class="panel">
+        <h2>Recent tickets</h2>
+        <table>
+          <thead><tr><th>ID</th><th>Subject</th><th>Requester</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>#48213</td><td>Cannot find where to change my preferences</td><td>A. Patel</td><td><span class="pill open">Open</span></td></tr>
+            <tr><td>#48207</td><td>VPN drops every few minutes</td><td>M. Chen</td><td><span class="pill prog">In progress</span></td></tr>
+            <tr><td>#48199</td><td>Request: new monitor</td><td>L. Garcia</td><td><span class="pill done">Resolved</span></td></tr>
+            <tr><td>#48190</td><td>Where is the settings gear?? I give up</td><td>S. Muller</td><td><span class="pill open">Open</span></td></tr>
+            <tr><td>#48184</td><td>Password reset loop</td><td>R. Okoro</td><td><span class="pill done">Resolved</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Embedded FeedbackFlow form (collapsible) -->
+      <div class="feedback-wrap" id="feedbackWrap">
+        <div class="fh" id="feedbackToggle" role="button" tabindex="0" aria-expanded="true" aria-controls="feedbackFrame">
+          <div class="fh-text">
+            <h2>Tell us what's not working</h2>
+            <p>Struggling to find something? Let the product team know — it goes straight to our review board.</p>
+          </div>
+          <span class="chev" aria-hidden="true">▼</span>
+        </div>
+        <div class="frame" id="feedbackFrame">
+            <iframe src="http://localhost:5173/form/contosa-support-hub-an9n" width="100%" height="900" frameborder="0" title="Feedback form"></iframe>
+        </div>
+      </div>
+
+      <div class="foot">© Contoso Support Hub · Internal demo environment · v3.2.1</div>
+    </main>
+  </div>
+
+  <script>
+    // Avatar dropdown
+    const am = document.getElementById('avatarMenu');
+    document.getElementById('avatarBtn').addEventListener('click', (e) => {
+      e.stopPropagation(); am.classList.toggle('open');
+    });
+    // Hidden "more" menu that contains Settings
+    const mm = document.getElementById('moreMenu');
+    document.getElementById('moreToggle').addEventListener('click', (e) => {
+      e.stopPropagation(); mm.classList.toggle('open');
+    });
+    document.addEventListener('click', () => { am.classList.remove('open'); mm.classList.remove('open'); });
+
+    // Collapsible embedded feedback form
+    const fw = document.getElementById('feedbackWrap');
+    const ft = document.getElementById('feedbackToggle');
+    const fr = document.getElementById('feedbackFrame');
+    fr.style.height = fr.scrollHeight + 'px';
+    function toggleFeedback() {
+      const collapsed = fw.classList.toggle('collapsed');
+      ft.setAttribute('aria-expanded', String(!collapsed));
+      if (!collapsed) fr.style.height = fr.scrollHeight + 'px';
+    }
+    ft.addEventListener('click', toggleFeedback);
+    ft.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFeedback(); }
+    });
+  </script>
+</body>
+</html>

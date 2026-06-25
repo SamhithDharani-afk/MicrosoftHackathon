@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertTriangle, TrendingUp, Gauge, MessageSquare, ChevronDown, ChevronRight, Wand2, Image, Workflow, Eye, Sparkles, Globe, GitBranch, Plus } from 'lucide-react';
+import { AlertTriangle, TrendingUp, MessageSquare, ChevronDown, ChevronRight, Image, Workflow, Eye, Sparkles, Globe, GitBranch, Plus } from 'lucide-react';
 import { useWebsites } from '../context/WebsitesContext';
 import { fetchFeedback, fetchPainPoints } from '../utils/api';
 import { severityMeta } from '../utils/severity';
 
-function PainPointCard({ pp, onGenerate }) {
+function PainPointCard({ pp, avgSeverity, onGenerate }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -24,6 +24,14 @@ function PainPointCard({ pp, onGenerate }) {
         </div>
         <div className="flex items-center gap-4 flex-shrink-0 ml-4">
           <div className="hidden md:flex items-center gap-4 text-xs text-gray-500">
+            {avgSeverity != null && (
+              <span>
+                Avg severity:{' '}
+                <strong className={severityMeta(avgSeverity).text}>
+                  {avgSeverity.toFixed(1)}/5 · {severityMeta(avgSeverity).label}
+                </strong>
+              </span>
+            )}
             <span>Impact: <strong className="text-white">{pp.impactScore}</strong></span>
             <span>Mentions: <strong className="text-white">{pp.mentionCount}</strong></span>
           </div>
@@ -38,6 +46,14 @@ function PainPointCard({ pp, onGenerate }) {
       {/* Expanded details */}
       {expanded && (
         <div className="px-6 pb-5 border-t border-gray-800 pt-4 animate-fade-in">
+          {avgSeverity != null && (
+            <div className="flex items-center gap-2 mb-3 md:hidden">
+              <span className="text-xs text-gray-500">Average severity</span>
+              <span className={`px-2 py-0.5 rounded text-xs font-medium ${severityMeta(avgSeverity).badge}`}>
+                {avgSeverity.toFixed(1)}/5 · {severityMeta(avgSeverity).label}
+              </span>
+            </div>
+          )}
           <p className="text-sm text-gray-400 mb-4">{pp.summary}</p>
 
           {/* Root Cause — compact */}
@@ -108,80 +124,116 @@ function PainPointCard({ pp, onGenerate }) {
   );
 }
 
+// A single feedback row whose text expands on click (full text is otherwise
+// truncated to one line and was previously impossible to read in full).
+function FeedbackRow({ fb }) {
+  const [open, setOpen] = useState(false);
+  const meta = severityMeta(fb.rating);
+  return (
+    <tr
+      onClick={() => setOpen((o) => !o)}
+      className="border-b border-gray-800/50 hover:bg-gray-800/20 cursor-pointer align-top"
+    >
+      <td className="px-5 py-3 whitespace-nowrap">
+        <span className="text-white font-medium">{fb.submitter}</span>
+        <span className="text-gray-500 text-xs ml-1.5">({fb.role})</span>
+      </td>
+      <td className="px-5 py-3 whitespace-nowrap">
+        <span className={`px-2 py-0.5 rounded text-xs font-medium ${meta.badge}`}>
+          {fb.rating}/5 · {meta.label}
+        </span>
+      </td>
+      <td className="px-5 py-3 text-gray-300">
+        <div className="flex items-start gap-2">
+          {open ? (
+            <ChevronDown className="w-3.5 h-3.5 text-gray-500 mt-0.5 flex-shrink-0" />
+          ) : (
+            <ChevronRight className="w-3.5 h-3.5 text-gray-500 mt-0.5 flex-shrink-0" />
+          )}
+          <span className={open ? 'whitespace-pre-wrap break-words' : 'block max-w-lg truncate'}>
+            {fb.text}
+          </span>
+        </div>
+      </td>
+      <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">{fb.date}</td>
+    </tr>
+  );
+}
+
 export default function ManagerDashboard() {
   const navigate = useNavigate();
   const { websites, activeWebsite, activeWebsiteId, setActiveWebsite } = useWebsites();
-  const [generating, setGenerating] = useState(null); // { ppId, type }
   const [feedbackEntries, setFeedbackEntries] = useState([]);
   const [painPoints, setPainPoints] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // feedback list loading
+  const [ppLoading, setPpLoading] = useState(true); // AI pain-point analysis
+  const [ppError, setPpError] = useState(null);
 
-  // Pull live feedback + AI-clustered pain points for the selected website.
+  // Feedback loads instantly (plain DB read); the AI pain-point analysis is a
+  // separate, slower request so it can show its own "Analyzing…" state without
+  // blocking the feedback table or stats.
   useEffect(() => {
     let active = true;
     setLoading(true);
-    Promise.all([fetchFeedback(activeWebsiteId), fetchPainPoints(activeWebsiteId)])
-      .then(([fb, pp]) => {
+    fetchFeedback(activeWebsiteId)
+      .then((fb) => { if (active) setFeedbackEntries(fb); })
+      .catch(() => { if (active) setFeedbackEntries([]); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [activeWebsiteId]);
+
+  useEffect(() => {
+    let active = true;
+    setPpLoading(true);
+    setPpError(null);
+    setPainPoints([]);
+    fetchPainPoints(activeWebsiteId)
+      .then((res) => {
         if (!active) return;
-        setFeedbackEntries(fb);
-        setPainPoints(pp);
+        setPainPoints(res.painPoints);
+        setPpError(res.error);
       })
       .catch(() => {
         if (!active) return;
-        setFeedbackEntries([]);
         setPainPoints([]);
+        setPpError('Could not analyze feedback right now.');
       })
-      .finally(() => { if (active) setLoading(false); });
+      .finally(() => { if (active) setPpLoading(false); });
     return () => { active = false; };
   }, [activeWebsiteId]);
 
   const totalFeedback = feedbackEntries.length;
   const criticalCount = painPoints.filter(p => p.severity === 'critical').length;
-  // Average severity rating (1 = Mild … 5 = Critical) across all feedback.
-  const avgSeverity = totalFeedback
-    ? feedbackEntries.reduce((sum, f) => sum + (f.rating ?? 3), 0) / totalFeedback
-    : 0;
-  const avgSeverityMeta = severityMeta(avgSeverity);
+  // Look up feedback by id so each pain point can show the average severity of
+  // its own related submissions (shown per-card now, not in the dashboard header).
+  const feedbackById = new Map(feedbackEntries.map((f) => [f.id, f]));
+  const painPointAvgSeverity = (pp) => {
+    const rated = (pp.relatedFeedback || [])
+      .map((id) => feedbackById.get(id))
+      .filter(Boolean);
+    if (!rated.length) return null;
+    return rated.reduce((sum, f) => sum + (f.rating ?? 3), 0) / rated.length;
+  };
 
+  // Route to the solution view for this pain point. Curated pain points keep
+  // their bespoke demo artifacts (by solution id); AI-clustered pain points pass
+  // the pain point + website so the target view generates the artifact for real.
   const handleGenerate = (pp, type) => {
-    setGenerating({ ppId: pp.id, type });
-
-    // Simulate AI generation delay, then navigate to the result for THIS pain point.
-    setTimeout(() => {
-      setGenerating(null);
-      if (type === 'wireframe') {
-        const sol = pp.solutions.find(s => s.type === 'wireframe');
-        // A bespoke wireframe renderer currently exists for the Viva Engage example.
-        if (sol) navigate(`/wireframe/${sol.id}`);
-        else {
-          // Fall back to a process flow if this pain point has no wireframe yet.
-          const flow = pp.solutions.find(s => s.type === 'process-flow');
-          navigate(flow ? `/process-flow/${flow.id}` : `/pain-point/${pp.id}`);
-        }
-      } else if (type === 'process-flow') {
-        const sol = pp.solutions.find(s => s.type === 'process-flow');
-        navigate(sol ? `/process-flow/${sol.id}` : `/pain-point/${pp.id}`);
-      } else {
-        navigate(`/pain-point/${pp.id}`);
-      }
-    }, 1500);
+    const state = { painPoint: pp, website: activeWebsite };
+    if (type === 'wireframe') {
+      const sol = pp.solutions?.find((s) => s.type === 'wireframe');
+      navigate(sol ? `/wireframe/${sol.id}` : `/wireframe/${pp.id}`, { state });
+    } else if (type === 'process-flow') {
+      const sol = pp.solutions?.find((s) => s.type === 'process-flow');
+      navigate(sol ? `/process-flow/${sol.id}` : `/process-flow/${pp.id}`, { state });
+    } else {
+      const sol = pp.solutions?.find((s) => s.type === 'walkthrough');
+      navigate(`/pain-point/${pp.id}`, { state: sol ? state : { ...state, generate: 'walkthrough' } });
+    }
   };
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-10 animate-fade-in">
-      {/* Generation Overlay */}
-      {generating && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 text-center max-w-sm">
-            <div className="w-14 h-14 rounded-full bg-indigo-500/20 flex items-center justify-center mx-auto mb-4">
-              <Wand2 className="w-7 h-7 text-indigo-400 animate-spin" />
-            </div>
-            <h3 className="text-lg font-semibold text-white mb-2">Generating {generating.type.replace('-', ' ')}...</h3>
-            <p className="text-sm text-gray-400">AI is analyzing {activeWebsite?.name}'s feedback and building a visual solution</p>
-          </div>
-        </div>
-      )}
-
       {/* Website switcher — the dashboard reconfigures per selected website */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
@@ -234,10 +286,22 @@ export default function ManagerDashboard() {
           </p>
         </div>
         {totalFeedback > 0 && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/30">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-xs text-green-400 font-medium">AI Analysis Complete</span>
-          </div>
+          ppLoading ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/30">
+              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+              <span className="text-xs text-indigo-300 font-medium">Analyzing…</span>
+            </div>
+          ) : ppError ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span className="text-xs text-amber-300 font-medium">AI Analysis Unavailable</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/30">
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-xs text-green-400 font-medium">AI Analysis Complete</span>
+            </div>
+          )
         )}
       </div>
 
@@ -267,12 +331,11 @@ export default function ManagerDashboard() {
       ) : (
         <>
           {/* Stats — compact row */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+          <div className="grid grid-cols-3 gap-3 mb-8">
             {[
               { label: 'Submissions', value: totalFeedback, icon: MessageSquare, accent: 'text-indigo-400', bg: 'bg-indigo-500/10' },
-              { label: 'Pain Points', value: painPoints.length, icon: AlertTriangle, accent: 'text-amber-400', bg: 'bg-amber-500/10' },
-              { label: 'Critical', value: criticalCount, icon: TrendingUp, accent: 'text-red-400', bg: 'bg-red-500/10' },
-              { label: 'Avg Severity', value: totalFeedback ? `${avgSeverity.toFixed(1)}/5` : '—', icon: Gauge, accent: avgSeverityMeta.text, bg: avgSeverityMeta.bg },
+              { label: 'Pain Points', value: ppLoading ? '—' : painPoints.length, icon: AlertTriangle, accent: 'text-amber-400', bg: 'bg-amber-500/10' },
+              { label: 'Critical', value: ppLoading ? '—' : criticalCount, icon: TrendingUp, accent: 'text-red-400', bg: 'bg-red-500/10' },
             ].map(({ label, value, icon: Icon, accent, bg }) => (
               <div key={label} className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 flex items-center gap-3">
                 <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center`}>
@@ -296,9 +359,34 @@ export default function ManagerDashboard() {
               <span className="text-xs text-gray-500">Click to expand • Generate solutions with one click</span>
             </div>
             <div className="space-y-3">
-              {painPoints.map((pp) => (
-                <PainPointCard key={pp.id} pp={pp} onGenerate={handleGenerate} />
-              ))}
+              {ppLoading ? (
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-10 text-center">
+                  <div className="w-12 h-12 rounded-full bg-indigo-500/15 flex items-center justify-center mx-auto mb-4">
+                    <Sparkles className="w-6 h-6 text-indigo-400 animate-pulse" />
+                  </div>
+                  <h3 className="text-base font-semibold text-white mb-1">Analyzing feedback…</h3>
+                  <p className="text-sm text-gray-500 max-w-sm mx-auto">
+                    The AI is reading all {totalFeedback} submission{totalFeedback === 1 ? '' : 's'} and
+                    grouping them into distinct pain points. This usually takes a few seconds.
+                  </p>
+                </div>
+              ) : ppError ? (
+                <div className="bg-gray-900 border border-amber-500/30 rounded-xl p-8 text-center">
+                  <div className="w-11 h-11 rounded-full bg-amber-500/15 flex items-center justify-center mx-auto mb-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <h3 className="text-base font-semibold text-white mb-1">Couldn’t analyze feedback</h3>
+                  <p className="text-sm text-gray-500 max-w-sm mx-auto">{ppError}</p>
+                </div>
+              ) : painPoints.length === 0 ? (
+                <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 text-center text-sm text-gray-500">
+                  No distinct pain points found yet — collect a bit more feedback.
+                </div>
+              ) : (
+                painPoints.map((pp) => (
+                  <PainPointCard key={pp.id} pp={pp} avgSeverity={painPointAvgSeverity(pp)} onGenerate={handleGenerate} />
+                ))
+              )}
             </div>
           </section>
 
@@ -320,19 +408,7 @@ export default function ManagerDashboard() {
                 </thead>
                 <tbody>
                   {feedbackEntries.map((fb) => (
-                    <tr key={fb.id} className="border-b border-gray-800/50 hover:bg-gray-800/20">
-                      <td className="px-5 py-3">
-                        <span className="text-white font-medium">{fb.submitter}</span>
-                        <span className="text-gray-500 text-xs ml-1.5">({fb.role})</span>
-                      </td>
-                      <td className="px-5 py-3">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${severityMeta(fb.rating).badge}`}>
-                          {fb.rating}/5 · {severityMeta(fb.rating).label}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-gray-300 max-w-lg truncate">{fb.text}</td>
-                      <td className="px-5 py-3 text-gray-500 text-xs">{fb.date}</td>
-                    </tr>
+                    <FeedbackRow key={fb.id} fb={fb} />
                   ))}
                 </tbody>
               </table>

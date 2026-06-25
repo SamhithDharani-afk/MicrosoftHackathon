@@ -2,6 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Sparkles } from 'lucide-react';
 import { useWebsites } from '../context/WebsitesContext';
 import FeedbackForm from '../components/FeedbackForm';
+import ThemeToggle from '../components/ThemeToggle';
 
 // Standalone, shareable feedback form (rendered OUTSIDE the app Layout/nav).
 // Reached via /form/:websiteId — the link people share like a Google Form.
@@ -33,7 +34,10 @@ export default function PublicForm() {
             </div>
             FeedbackFlow
           </div>
-          <span className="text-xs text-gray-500">Powered by FeedbackFlow</span>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500">Powered by FeedbackFlow</span>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 

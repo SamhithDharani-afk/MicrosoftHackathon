@@ -42,6 +42,140 @@ body {
 }
 .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
 
+/* Indeterminate progress bar: a sweep that starts from 0 width, so the score
+   track reads as empty (0%) while analyzing rather than a misleading ~40% fill. */
+@keyframes indeterminate-bar {
+  0%   { left: 0;    width: 0%; }
+  50%  { left: 0;    width: 40%; }
+  100% { left: 100%; width: 0%; }
+}
+.animate-indeterminate { position: absolute; top: 0; bottom: 0; animation: indeterminate-bar 1.2s ease-in-out infinite; }
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-primary); }
 ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+
+/* ============================================================================
+   LIGHT MODE
+   The app is authored dark-first with literal Tailwind color utilities
+   (bg-gray-900, text-white, …). Rather than rewrite ~520 class usages with
+   dark:/light: variants, light mode is a single override layer keyed off the
+   `light` class on <html> (toggled by ThemeContext). These selectors are
+   unlayered and use `html.light …`, so they outrank Tailwind's layered
+   utilities regardless of source order. Strategy: invert the neutral gray ramp
+   (dark surfaces -> light surfaces, light text -> dark text) and darken the
+   lightest accent text shades so they stay legible on a light background.
+   Accent fills/buttons are left untouched.
+   ============================================================================ */
+html.light {
+  --bg-primary: #f4f6fb;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --border: #e2e8f0;
+  color-scheme: light;
+}
+
+html.light body { background: var(--bg-primary); color: var(--text-primary); }
+
+/* Surfaces (backgrounds) */
+html.light .bg-gray-950 { background-color: #eef2f7; }
+html.light .bg-gray-900 { background-color: #f4f6fb; }
+html.light .bg-gray-800 { background-color: #ffffff; }
+html.light .bg-gray-750,
+html.light .hover\:bg-gray-750:hover { background-color: #eef2f7; }
+html.light .bg-gray-700,
+html.light .hover\:bg-gray-700:hover { background-color: #f1f5f9; }
+html.light .bg-gray-600,
+html.light .hover\:bg-gray-600:hover { background-color: #e2e8f0; }
+html.light .bg-gray-500 { background-color: #cbd5e1; }
+html.light .bg-gray-400 { background-color: #94a3b8; }
+html.light .hover\:bg-gray-800:hover { background-color: #f1f5f9; }
+
+/* Translucent surfaces */
+html.light .bg-white\/5,
+html.light .hover\:bg-white\/5:hover { background-color: rgba(15, 23, 42, 0.04); }
+html.light .bg-white\/10,
+html.light .hover\:bg-white\/10:hover { background-color: rgba(15, 23, 42, 0.06); }
+html.light .bg-gray-900\/80 { background-color: rgba(244, 246, 251, 0.85); }
+html.light .bg-gray-900\/50 { background-color: rgba(244, 246, 251, 0.6); }
+html.light .bg-gray-800\/50 { background-color: rgba(255, 255, 255, 0.65); }
+html.light .bg-gray-800\/20,
+html.light .hover\:bg-gray-800\/20:hover { background-color: rgba(255, 255, 255, 0.55); }
+html.light .bg-gray-700\/50 { background-color: rgba(241, 245, 249, 0.6); }
+
+/* Text */
+html.light .text-white,
+html.light .hover\:text-white:hover { color: #0f172a; }
+html.light .text-gray-200 { color: #1e293b; }
+html.light .text-gray-300,
+html.light .hover\:text-gray-300:hover { color: #334155; }
+html.light .text-gray-400 { color: #475569; }
+html.light .text-gray-500 { color: #64748b; }
+html.light .text-gray-600 { color: #94a3b8; }
+html.light .placeholder-gray-500::placeholder { color: #94a3b8; }
+
+/* Borders */
+html.light .border-gray-800,
+html.light .hover\:border-gray-700:hover { border-color: #e5e9f0; }
+html.light .border-gray-800\/50 { border-color: rgba(226, 232, 240, 0.7); }
+html.light .border-gray-700 { border-color: #e2e8f0; }
+html.light .border-gray-600,
+html.light .hover\:border-gray-600:hover { border-color: #cbd5e1; }
+html.light .border-gray-500,
+html.light .hover\:border-gray-500:hover { border-color: #cbd5e1; }
+html.light .border-gray-400,
+html.light .hover\:border-gray-400:hover { border-color: #cbd5e1; }
+html.light .border-white\/10 { border-color: rgba(15, 23, 42, 0.1); }
+html.light .ring-white\/30 { --tw-ring-color: rgba(15, 23, 42, 0.2); }
+
+/* Accent text: darken the lightest shades so they stay legible on light. */
+html.light .text-indigo-400,
+html.light .hover\:text-indigo-400:hover { color: #4f46e5; }
+html.light .text-indigo-300,
+html.light .hover\:text-indigo-300:hover { color: #4338ca; }
+html.light .text-green-400 { color: #16a34a; }
+html.light .text-green-300 { color: #15803d; }
+html.light .text-red-400 { color: #dc2626; }
+html.light .text-red-300 { color: #b91c1c; }
+html.light .text-amber-400 { color: #d97706; }
+html.light .text-amber-300 { color: #b45309; }
+html.light .text-blue-400,
+html.light .hover\:text-blue-400:hover { color: #2563eb; }
+html.light .text-blue-300 { color: #1d4ed8; }
+html.light .text-lime-400 { color: #4d7c0f; }
+html.light .text-orange-400 { color: #ea580c; }
+html.light .text-orange-300 { color: #c2410c; }
+
+/* Keep light text on SOLID accent fills (buttons, badges, pills, the logo tile).
+   Setting `color` on the FILL element itself means white text AND inheriting
+   icons (Sparkles etc. use currentColor) stay white — the blanket
+   `text-white -> dark` rule above would otherwise blacken them on these dark,
+   saturated surfaces. Translucent tints (bg-*-500/10 etc.) are distinct class
+   tokens and are NOT matched here, so dark text correctly stays on light tints.
+   Placed after the text-white rule so it wins the equal-specificity tie. */
+html.light .bg-indigo-600, html.light .bg-indigo-500,
+html.light .bg-green-600,  html.light .bg-green-500,
+html.light .bg-red-600,    html.light .bg-red-500,
+html.light .bg-blue-600,   html.light .bg-blue-500,
+html.light .bg-purple-600, html.light .bg-purple-500,
+html.light .bg-pink-600,   html.light .bg-orange-600,
+html.light .bg-amber-600,  html.light .bg-amber-500,
+html.light .bg-lime-600,   html.light .bg-teal-600 {
+  color: #ffffff;
+}
+
+/* Lighten the two dark indigo/purple hero gradients so dark text is legible.
+   Targeting the unique `from-*` class on each panel (its `to-*` sibling lives on
+   the same element) and replacing the gradient with a soft flat tint. */
+html.light .from-indigo-900\/30 { background-image: none; background-color: #eef1fc; }
+html.light .from-indigo-900\/40 { background-image: none; background-color: #e9ebfb; }
+
+/* Scrollbar + React Flow surfaces */
+html.light ::-webkit-scrollbar-thumb { background: #cbd5e1; }
+html.light .react-flow__background { background: #f4f6fb !important; }
+html.light .react-flow__minimap { background: #ffffff !important; border: 1px solid #e2e8f0 !important; }
+html.light .react-flow__controls { border: 1px solid #e2e8f0 !important; }
+html.light .react-flow__controls-button { background: #ffffff !important; border-color: #e2e8f0 !important; fill: #475569 !important; }
+html.light .react-flow__controls-button:hover { background: #f1f5f9 !important; }

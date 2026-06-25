@@ -42,11 +42,17 @@ export function buildBeforePrompt() {
 // generated BEFORE HTML and applies ONLY the proposed fix, returning the full
 // modified document. This is the fast call we run on-the-fly when the user clicks
 // Generate, so the AFTER differs from the BEFORE only by the requested change.
-export function buildAfterPrompt({ beforeHtml, painPointSummary, fixTitle, fixDescription }) {
+export function buildAfterPrompt({ beforeHtml, painPointSummary, fixTitle, fixDescription, refinement }) {
+  const refineBlock = refinement && String(refinement).trim()
+    ? `ADDITIONAL CORRECTION FROM THE REVIEWER (highest priority — the previous ` +
+      `attempt was not quite right). Apply this on top of the change above: ` +
+      `'${String(refinement).trim()}'.\n\n`
+    : '';
   return (
     `Here is the complete HTML of a web page:\n"""\n${String(beforeHtml || '')}\n"""\n\n` +
     `User feedback / pain point: '${painPointSummary || 'N/A'}'.\n` +
     `Apply ONLY this change to the page: '${fixTitle} — ${fixDescription}'.\n\n` +
+    refineBlock +
     `CRITICAL — TAG THE CHANGE (do this every time):\n` +
     `On the single HTML element you add or modify to implement the fix, add the ` +
     `attribute data-ff-new="true". Add it to exactly ONE element and to no other ` +
