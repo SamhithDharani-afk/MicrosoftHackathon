@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { feedbackEntries as seedFeedback, painPoints as curatedPainPoints, websites } from '../src/data/mockData.js';
-import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath } from './wireframe-service.js';
+import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath } from './wireframe-service.js';
 import { assistFeedback } from './assist-service.js';
 import { hasToken } from './github-models.js';
 import {
@@ -215,6 +215,10 @@ const resolveUrl = (websiteId, override) =>
 // Resolve a website's bundled screenshot asset (preferred vision source).
 const resolveImage = (websiteId) =>
   localScreenshotPath(websites.find((w) => w.id === websiteId)?.screenshotAsset);
+// Resolve a website's bundled curated "before" HTML (used verbatim, no screenshot)
+// for pages that block headless capture (e.g. support.microsoft.com).
+const resolveHtml = (websiteId) =>
+  localHtmlPath(websites.find((w) => w.id === websiteId)?.beforeHtmlAsset);
 
 // Return the pre-generated "before" wireframe for a website, generating + caching
 // it (screenshot -> faithful HTML) on first use.
@@ -230,6 +234,7 @@ app.get('/api/wireframe', async (req, res) => {
       websiteId,
       url: liveUrl,
       imagePath: resolveImage(websiteId),
+      htmlPath: resolveHtml(websiteId),
     });
     res.json({ before, url: liveUrl, ready: true });
   } catch (e) {
@@ -271,6 +276,7 @@ app.post('/api/wireframe/after', async (req, res) => {
       websiteId: String(b.websiteId),
       url: liveUrl,
       imagePath: resolveImage(b.websiteId),
+      htmlPath: resolveHtml(b.websiteId),
       painPointSummary: b.painPointSummary || '',
       fixTitle: String(b.fixTitle),
       fixDescription: b.fixDescription || '',

@@ -15,6 +15,12 @@
 // Topics ordered by specificity. `curated` references a curated pain point id
 // in mockData; it is only reused when that pain point belongs to the website.
 export const TOPICS = [
+  { key: 'support-settings', label: 'finding account settings', curated: 'pp-301',
+    keywords: ['settings button', 'settings icon', 'settings gear', 'account settings', 'find settings', 'contact preferences'] },
+  { key: 'support-passive', label: 'proactive vs passive support', curated: 'pp-302',
+    keywords: ['passive', 'proactive', 'reactive', 'contact an agent', 'live agent', 'talk to a person', 'get a human', 'follow up', 'follow-up'] },
+  { key: 'support-copilot', label: 'copilot discoverability', curated: 'pp-303',
+    keywords: ['copilot', 'ask copilot', 'copilot button', 'copilot icon', 'copilot entry'] },
   { key: 'settings-discovery', label: 'finding settings & preferences', curated: 'pp-001',
     keywords: ['setting', 'settings', 'gear', 'preference', 'preferences', 'configure', 'profile picture', 'notification preference'] },
   { key: 'search', label: 'search quality', curated: 'pp-002',

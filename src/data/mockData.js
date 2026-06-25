@@ -37,6 +37,17 @@ export const websites = [
     repoConnected: false,
     seed: true,
   },
+  {
+    id: 'ms-support',
+    name: 'Microsoft Support',
+    shortName: 'Support',
+    url: 'https://support.microsoft.com/en-us',
+    beforeHtmlAsset: 'ms-support-before.html',
+    emoji: '🛟',
+    accent: 'cyan',
+    repoConnected: false,
+    seed: true,
+  },
 ];
 
 // ──────────────────────────────────────────────────────────────
@@ -150,6 +161,62 @@ export const feedbackEntries = [
     text: "The 'Schedule send' clock icon is so small I never noticed it existed for months. Make it a labelled button next to Send.",
     tags: ['compose', 'schedule-send', 'ux', 'outlook'],
   },
+
+  // ─── Microsoft Support ─────────────────────────────────────
+  {
+    id: 'fb-301', websiteId: 'ms-support',
+    submitter: 'Diego A.', role: 'customer', department: 'IT', date: '2026-06-25', rating: 5,
+    text: "Where are the settings on Microsoft Support? I clicked all over the support page and still can't find the settings button or the settings icon to manage my account settings.",
+    tags: ['settings', 'navigation', 'ms-support'],
+  },
+  {
+    id: 'fb-302', websiteId: 'ms-support',
+    submitter: 'Hannah B.', role: 'customer', department: 'Customer Success', date: '2026-06-25', rating: 4,
+    text: "The account settings button on the support site is impossible to locate. There's no settings gear anywhere in the header. I gave up trying to find settings.",
+    tags: ['settings', 'navigation', 'ms-support'],
+  },
+  {
+    id: 'fb-303', websiteId: 'ms-support',
+    submitter: 'Yuki T.', role: 'customer', department: 'External', date: '2026-06-26', rating: 4,
+    text: "I needed to update my contact preferences but the settings icon is hidden. A visible settings button in the top-right would help me find settings instantly.",
+    tags: ['settings', 'navigation', 'ms-support'],
+  },
+  {
+    id: 'fb-304', websiteId: 'ms-support',
+    submitter: 'Marcus L.', role: 'customer', department: 'External', date: '2026-06-25', rating: 5,
+    text: "Microsoft Support feels completely passive. I have to dig for answers myself — there's no proactive help and no easy way to contact an agent or talk to a person.",
+    tags: ['support-experience', 'passive', 'ms-support'],
+  },
+  {
+    id: 'fb-305', websiteId: 'ms-support',
+    submitter: 'Nadia R.', role: 'employee', department: 'Operations', date: '2026-06-26', rating: 5,
+    text: "The support experience is too reactive. I want proactive suggestions and a clear 'contact an agent' button. Right now it just waits for me with no follow-up.",
+    tags: ['support-experience', 'passive', 'ms-support'],
+  },
+  {
+    id: 'fb-306', websiteId: 'ms-support',
+    submitter: 'Owen P.', role: 'customer', department: 'Customer Success', date: '2026-06-27', rating: 4,
+    text: "Support is passive — articles everywhere but no proactive guidance. I couldn't find a live agent or any way to get a human to follow up on my issue.",
+    tags: ['support-experience', 'passive', 'ms-support'],
+  },
+  {
+    id: 'fb-307', websiteId: 'ms-support',
+    submitter: 'Sofia G.', role: 'employee', department: 'Engineering', date: '2026-06-25', rating: 4,
+    text: "Copilot is completely buried on the support page. I couldn't find the Ask Copilot button anywhere — it should be front and center, not hidden.",
+    tags: ['copilot', 'discoverability', 'ms-support'],
+  },
+  {
+    id: 'fb-308', websiteId: 'ms-support',
+    submitter: 'Raj M.', role: 'customer', department: 'IT', date: '2026-06-26', rating: 3,
+    text: "Where is Copilot on Microsoft Support? The Copilot button is buried at the bottom. I'd use Copilot constantly if the Ask Copilot icon were easy to find.",
+    tags: ['copilot', 'discoverability', 'ms-support'],
+  },
+  {
+    id: 'fb-309', websiteId: 'ms-support',
+    submitter: 'Elena V.', role: 'customer', department: 'External', date: '2026-06-27', rating: 3,
+    text: "Copilot feels hidden on support. Surface the Ask Copilot entry point prominently so people actually discover it instead of leaving it in a corner.",
+    tags: ['copilot', 'discoverability', 'ms-support'],
+  },
 ];
 
 // ──────────────────────────────────────────────────────────────
@@ -235,6 +302,47 @@ export const painPoints = [
     relatedFeedback: ['fb-203'],
     solutions: [
       { id: 'sol-203', type: 'process-flow', title: 'Inline Attachment Preview Flow', description: 'Flow enabling fast hover/click previews without downloading.' },
+    ],
+  },
+
+  // ─── Microsoft Support ─────────────────────────────────────
+  {
+    id: 'pp-301', websiteId: 'ms-support',
+    title: 'Settings Button Not Discoverable in Microsoft Support',
+    severity: 'critical', mentionCount: 3, impactScore: 82,
+    departments: ['IT', 'Customer Success', 'External'],
+    summary: 'Customers cannot locate account settings on Microsoft Support. There is no visible gear/settings icon in the header, so people abandon tasks like updating contact preferences and managing their account.',
+    rootCause: 'Account settings live behind the profile menu with no persistent icon in the primary navigation. This violates Nielsen\'s "Visibility of System Status" and "Recognition rather than Recall" heuristics.',
+    relatedFeedback: ['fb-301', 'fb-302', 'fb-303'],
+    solutions: [
+      { id: 'sol-301', type: 'wireframe', title: 'Add Visible Settings Gear to Support Header', description: 'Place a persistent ⚙️ settings gear icon in the top-right of the Microsoft Support header, next to the profile avatar, giving 1-click access to account settings and preferences.' },
+      { id: 'sol-302', type: 'process-flow', title: 'Streamlined Settings Access Flow', description: 'Process flow showing the improved journey from any support page to account settings in a single click.' },
+    ],
+  },
+  {
+    id: 'pp-302', websiteId: 'ms-support',
+    title: 'Support Experience Feels Passive, Not Proactive',
+    severity: 'critical', mentionCount: 3, impactScore: 86,
+    departments: ['External', 'Operations', 'Customer Success'],
+    summary: 'The support page is reactive — it shows static articles and waits for users to dig for answers. People want proactive guidance and a clear, fast path to contact a live agent or human follow-up.',
+    rootCause: 'The page leads with a wall of self-help articles and hides agent/escalation paths. There is no proactive recommendation surface and no prominent "Contact an agent" entry point, so users feel unsupported.',
+    relatedFeedback: ['fb-304', 'fb-305', 'fb-306'],
+    solutions: [
+      { id: 'sol-303', type: 'wireframe', title: 'Add Proactive Help + "Contact an Agent" Panel', description: 'Surface a proactive support panel with recommended next steps and a prominent "Contact an agent" / "Talk to a person" button so users are guided instead of left to search.' },
+      { id: 'sol-304', type: 'process-flow', title: 'Proactive Support Escalation Flow', description: 'Process flow turning the passive article hunt into a guided journey: proactive suggestions → quick triage → 1-click handoff to a live agent.' },
+    ],
+  },
+  {
+    id: 'pp-303', websiteId: 'ms-support',
+    title: 'Copilot Is Buried and Hard to Discover',
+    severity: 'high', mentionCount: 3, impactScore: 70,
+    departments: ['Engineering', 'IT', 'External'],
+    summary: 'Copilot is hidden at the bottom of the support page, so users never discover the fastest way to get answers. People say they would use "Ask Copilot" constantly if the entry point were visible.',
+    rootCause: 'The Copilot entry point is placed below the fold with no prominent affordance, burying the highest-value assistance behind static content.',
+    relatedFeedback: ['fb-307', 'fb-308', 'fb-309'],
+    solutions: [
+      { id: 'sol-305', type: 'wireframe', title: 'Surface a Prominent "Ask Copilot" Entry Point', description: 'Promote Copilot to a prominent "Ask Copilot" button/search bar near the top of the support page so users immediately discover AI-assisted help.' },
+      { id: 'sol-306', type: 'process-flow', title: 'Copilot-First Support Flow', description: 'Process flow showing a Copilot-first journey: ask in natural language → instant answer or guided steps → escalate only if needed.' },
     ],
   },
 ];
@@ -454,6 +562,91 @@ export const processFlows = {
       { id: 'e3', source: 'start', target: 'new-1', label: 'After', ...edgeGreen },
       { id: 'e4', source: 'new-1', target: 'new-2', ...edgeGreen },
       { id: 'e5', source: 'new-2', target: 'result', ...edgeBlue },
+    ],
+  },
+
+  // ─── Microsoft Support: settings access ────────────────────
+  'sol-302': {
+    title: 'Streamlined Settings Access Flow — Microsoft Support',
+    description: 'Previously, account settings on Microsoft Support hid behind the profile menu with no icon, so users hunted for minutes. The new design adds a persistent gear icon for 1-click access from any page.',
+    nodes: [
+      { id: 'start', type: 'custom', position: { x: 400, y: 0 }, data: { label: 'User wants to change\naccount settings', nodeType: 'start', color: C.start } },
+      { id: 'old', type: 'custom', position: { x: 100, y: 120 }, data: { label: '❌ OLD: no settings icon\nin the header', nodeType: 'problem', color: C.problem } },
+      { id: 'new', type: 'custom', position: { x: 650, y: 120 }, data: { label: '✅ NEW: ⚙️ gear pinned\ntop-right', nodeType: 'solution', color: C.solution } },
+      { id: 'old-1', type: 'custom', position: { x: 0, y: 250 }, data: { label: 'Scan the whole page', nodeType: 'step', color: C.badStep } },
+      { id: 'old-2', type: 'custom', position: { x: 0, y: 370 }, data: { label: 'Open profile menu, guess', nodeType: 'step', color: C.badStep } },
+      { id: 'old-3', type: 'custom', position: { x: 0, y: 490 }, data: { label: 'Give up / open a ticket\n(frustrated)', nodeType: 'end-bad', color: C.problem } },
+      { id: 'new-1', type: 'custom', position: { x: 600, y: 250 }, data: { label: 'Click ⚙️ gear icon', nodeType: 'solution-step', color: C.solution } },
+      { id: 'new-2', type: 'custom', position: { x: 600, y: 380 }, data: { label: 'Settings opens\n(1 click, < 2s)', nodeType: 'end-good', color: C.good } },
+      { id: 'result', type: 'custom', position: { x: 600, y: 510 }, data: { label: '🎉 Task done fast\nSupport tickets: -70%', nodeType: 'outcome', color: C.outcome } },
+    ],
+    edges: [
+      { id: 'e1', source: 'start', target: 'old', label: 'Before', ...edgeRed },
+      { id: 'e2', source: 'start', target: 'new', label: 'After', ...edgeGreen },
+      { id: 'e3', source: 'old', target: 'old-1', ...edgeRed },
+      { id: 'e4', source: 'old-1', target: 'old-2', ...edgeRed },
+      { id: 'e5', source: 'old-2', target: 'old-3', ...edgeRed },
+      { id: 'e6', source: 'new', target: 'new-1', ...edgeGreen },
+      { id: 'e7', source: 'new-1', target: 'new-2', ...edgeGreen },
+      { id: 'e8', source: 'new-2', target: 'result', ...edgeBlue },
+    ],
+  },
+
+  // ─── Microsoft Support: proactive escalation ───────────────
+  'sol-304': {
+    title: 'Proactive Support Escalation Flow — Microsoft Support',
+    description: 'The old experience was passive: a wall of articles with no guidance and a hidden path to a human. The new flow proactively suggests next steps and hands off to a live agent in one click.',
+    nodes: [
+      { id: 'start', type: 'custom', position: { x: 400, y: 0 }, data: { label: 'User has a problem', nodeType: 'start', color: C.start } },
+      { id: 'old', type: 'custom', position: { x: 100, y: 120 }, data: { label: '❌ OLD: passive wall\nof articles', nodeType: 'problem', color: C.problem } },
+      { id: 'new', type: 'custom', position: { x: 650, y: 120 }, data: { label: '✅ NEW: proactive\nguided support', nodeType: 'solution', color: C.solution } },
+      { id: 'old-1', type: 'custom', position: { x: 0, y: 250 }, data: { label: 'Read & search alone', nodeType: 'step', color: C.badStep } },
+      { id: 'old-2', type: 'custom', position: { x: 0, y: 370 }, data: { label: 'No "contact agent" path', nodeType: 'step', color: C.badStep } },
+      { id: 'old-3', type: 'custom', position: { x: 0, y: 490 }, data: { label: 'Leaves unresolved\n(feels unsupported)', nodeType: 'end-bad', color: C.problem } },
+      { id: 'new-1', type: 'custom', position: { x: 560, y: 250 }, data: { label: 'Proactive next-step\nsuggestions', nodeType: 'solution-step', color: C.solution } },
+      { id: 'new-2', type: 'custom', position: { x: 560, y: 380 }, data: { label: 'Quick triage\n(2 questions)', nodeType: 'solution-step', color: C.solution } },
+      { id: 'new-3', type: 'custom', position: { x: 790, y: 380 }, data: { label: '1-click "Contact an\nagent" handoff', nodeType: 'solution-step', color: C.solution } },
+      { id: 'result', type: 'custom', position: { x: 620, y: 520 }, data: { label: '🎉 Resolved with a human\nCSAT: +35%', nodeType: 'outcome', color: C.outcome } },
+    ],
+    edges: [
+      { id: 'e1', source: 'start', target: 'old', label: 'Before', ...edgeRed },
+      { id: 'e2', source: 'start', target: 'new', label: 'After', ...edgeGreen },
+      { id: 'e3', source: 'old', target: 'old-1', ...edgeRed },
+      { id: 'e4', source: 'old-1', target: 'old-2', ...edgeRed },
+      { id: 'e5', source: 'old-2', target: 'old-3', ...edgeRed },
+      { id: 'e6', source: 'new', target: 'new-1', ...edgeGreen },
+      { id: 'e7', source: 'new-1', target: 'new-2', ...edgeGreen },
+      { id: 'e8', source: 'new-2', target: 'new-3', ...edgeGreen },
+      { id: 'e9', source: 'new-3', target: 'result', ...edgeBlue },
+    ],
+  },
+
+  // ─── Microsoft Support: Copilot-first ──────────────────────
+  'sol-306': {
+    title: 'Copilot-First Support Flow — Microsoft Support',
+    description: 'Copilot was buried at the bottom of the page, so users never found it. Promoting "Ask Copilot" to the top turns support into an instant, conversational experience that escalates only when needed.',
+    nodes: [
+      { id: 'start', type: 'custom', position: { x: 400, y: 0 }, data: { label: 'User needs an answer', nodeType: 'start', color: C.start } },
+      { id: 'old', type: 'custom', position: { x: 100, y: 120 }, data: { label: '❌ OLD: Copilot buried\nbelow the fold', nodeType: 'problem', color: C.problem } },
+      { id: 'new', type: 'custom', position: { x: 650, y: 120 }, data: { label: '✅ NEW: "Ask Copilot"\nat the top', nodeType: 'solution', color: C.solution } },
+      { id: 'old-1', type: 'custom', position: { x: 0, y: 250 }, data: { label: 'Never sees Copilot', nodeType: 'step', color: C.badStep } },
+      { id: 'old-2', type: 'custom', position: { x: 0, y: 370 }, data: { label: 'Scrolls articles manually', nodeType: 'step', color: C.badStep } },
+      { id: 'old-3', type: 'custom', position: { x: 0, y: 490 }, data: { label: 'Slow, often gives up', nodeType: 'end-bad', color: C.problem } },
+      { id: 'new-1', type: 'custom', position: { x: 600, y: 250 }, data: { label: 'Ask in natural language', nodeType: 'solution-step', color: C.solution } },
+      { id: 'new-2', type: 'custom', position: { x: 600, y: 380 }, data: { label: 'Instant answer or\nguided steps', nodeType: 'end-good', color: C.good } },
+      { id: 'new-3', type: 'custom', position: { x: 820, y: 380 }, data: { label: 'Escalate to agent\nonly if needed', nodeType: 'solution-step', color: C.solution } },
+      { id: 'result', type: 'custom', position: { x: 640, y: 520 }, data: { label: '🎉 Answer in seconds\nCopilot usage: +5x', nodeType: 'outcome', color: C.outcome } },
+    ],
+    edges: [
+      { id: 'e1', source: 'start', target: 'old', label: 'Before', ...edgeRed },
+      { id: 'e2', source: 'start', target: 'new', label: 'After', ...edgeGreen },
+      { id: 'e3', source: 'old', target: 'old-1', ...edgeRed },
+      { id: 'e4', source: 'old-1', target: 'old-2', ...edgeRed },
+      { id: 'e5', source: 'old-2', target: 'old-3', ...edgeRed },
+      { id: 'e6', source: 'new', target: 'new-1', ...edgeGreen },
+      { id: 'e7', source: 'new-1', target: 'new-2', ...edgeGreen },
+      { id: 'e8', source: 'new-2', target: 'result', ...edgeBlue },
+      { id: 'e9', source: 'new-2', target: 'new-3', ...edgeGreen },
     ],
   },
 };

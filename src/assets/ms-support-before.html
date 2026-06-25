@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1280, initial-scale=1" />
+<title>Microsoft Support</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    width: 1280px;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: #242424;
+    background: #ffffff;
+  }
+  a { color: #0067b8; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Top header */
+  header {
+    height: 56px;
+    border-bottom: 1px solid #e1dfdd;
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    gap: 24px;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo .squares { display: grid; grid-template-columns: 10px 10px; grid-template-rows: 10px 10px; gap: 2px; }
+  .logo .squares span { width: 10px; height: 10px; display: block; }
+  .logo .squares span:nth-child(1) { background: #f25022; }
+  .logo .squares span:nth-child(2) { background: #7fba00; }
+  .logo .squares span:nth-child(3) { background: #00a4ef; }
+  .logo .squares span:nth-child(4) { background: #ffb900; }
+  .logo .name { font-size: 18px; font-weight: 600; color: #242424; }
+  .logo .sub { font-size: 18px; color: #616161; font-weight: 400; }
+
+  nav.top { display: flex; gap: 22px; font-size: 14px; }
+  nav.top a { color: #242424; }
+
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  .search {
+    width: 260px; height: 34px; border: 1px solid #8a8886; border-radius: 2px;
+    display: flex; align-items: center; padding: 0 10px; color: #767676; font-size: 13px; gap: 8px;
+  }
+  .avatar {
+    width: 32px; height: 32px; border-radius: 50%; background: #0067b8;
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600;
+  }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(180deg, #f3f9fd 0%, #ffffff 100%);
+    padding: 56px 28px 44px;
+    text-align: center;
+    border-bottom: 1px solid #edebe9;
+  }
+  .hero h1 { font-size: 34px; font-weight: 600; margin: 0 0 22px; color: #242424; }
+  .hero .hero-search {
+    max-width: 640px; margin: 0 auto; height: 48px;
+    border: 1px solid #8a8886; border-radius: 4px; background: #fff;
+    display: flex; align-items: center; padding: 0 16px; gap: 12px;
+    font-size: 15px; color: #767676;
+  }
+  .hero .hero-search .go { margin-left: auto; color: #0067b8; font-weight: 600; }
+
+  /* Body */
+  main { padding: 40px 80px 30px; }
+  .section-title { font-size: 22px; font-weight: 600; margin: 0 0 22px; }
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .card {
+    border: 1px solid #e1dfdd; border-radius: 6px; padding: 22px 18px;
+    background: #fff; min-height: 132px;
+  }
+  .card .ic { font-size: 26px; }
+  .card h3 { font-size: 15px; font-weight: 600; margin: 12px 0 6px; }
+  .card p { font-size: 13px; color: #616161; margin: 0; line-height: 1.4; }
+
+  .help-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 34px; }
+  .help-row .panel { border: 1px solid #e1dfdd; border-radius: 6px; padding: 22px; }
+  .help-row .panel h3 { margin: 0 0 6px; font-size: 16px; }
+  .help-row .panel p { margin: 0 0 14px; font-size: 13px; color: #616161; }
+  .help-row .panel a { font-size: 13px; font-weight: 600; }
+
+  /* Footer — Copilot is buried way down here */
+  footer {
+    margin-top: 48px; border-top: 1px solid #e1dfdd; background: #f2f2f2;
+    padding: 26px 80px; font-size: 12px; color: #616161;
+  }
+  footer .cols { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  footer .cols a { display: block; color: #616161; margin-bottom: 8px; }
+  footer .legal { margin-top: 20px; color: #767676; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <span class="squares"><span></span><span></span><span></span><span></span></span>
+      <span class="name">Microsoft</span>
+      <span class="sub">Support</span>
+    </div>
+    <nav class="top">
+      <a href="#">Home</a>
+      <a href="#">Products</a>
+      <a href="#">Devices</a>
+      <a href="#">Account &amp; billing</a>
+      <a href="#">More support</a>
+    </nav>
+    <div class="header-right">
+      <div class="search">🔍 <span>Search</span></div>
+      <div class="avatar">JD</div>
+    </div>
+  </header>
+
+  <section class="hero">
+    <h1>How can we help you?</h1>
+    <div class="hero-search">🔍 <span>Describe your issue or search help articles</span><span class="go">Search</span></div>
+  </section>
+
+  <main>
+    <h2 class="section-title">Popular topics</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="ic">🪟</div>
+        <h3>Windows</h3>
+        <p>Updates, activation, and troubleshooting for Windows.</p>
+      </div>
+      <div class="card">
+        <div class="ic">📧</div>
+        <h3>Outlook</h3>
+        <p>Fix sign-in, sync, and email delivery problems.</p>
+      </div>
+      <div class="card">
+        <div class="ic">🔑</div>
+        <h3>Account &amp; billing</h3>
+        <p>Manage your Microsoft account, subscriptions, and payments.</p>
+      </div>
+      <div class="card">
+        <div class="ic">🛡️</div>
+        <h3>Security</h3>
+        <p>Recover your account and stay protected from threats.</p>
+      </div>
+    </div>
+
+    <div class="help-row">
+      <div class="panel">
+        <h3>Browse help articles</h3>
+        <p>Search our library of step-by-step guides and how-to articles.</p>
+        <a href="#">View all articles →</a>
+      </div>
+      <div class="panel">
+        <h3>Community</h3>
+        <p>Ask questions and find answers from other Microsoft users.</p>
+        <a href="#">Go to the community →</a>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="cols">
+      <div>
+        <strong style="color:#242424;">What's new</strong>
+        <a href="#">Surface devices</a>
+        <a href="#">Copilot+ PCs</a>
+        <a href="#">Microsoft 365</a>
+      </div>
+      <div>
+        <strong style="color:#242424;">Microsoft Store</strong>
+        <a href="#">Account profile</a>
+        <a href="#">Order tracking</a>
+        <a href="#">Returns</a>
+      </div>
+      <div>
+        <strong style="color:#242424;">Education</strong>
+        <a href="#">Microsoft in education</a>
+        <a href="#">Office for students</a>
+      </div>
+      <div>
+        <strong style="color:#242424;">Business</strong>
+        <a href="#">Microsoft Cloud</a>
+        <a href="#">Microsoft Teams</a>
+      </div>
+      <div>
+        <strong style="color:#242424;">Get help</strong>
+        <a href="#">Contact us</a>
+        <a href="#">Ask Copilot</a>
+        <a href="#">Feedback</a>
+      </div>
+    </div>
+    <div class="legal">© Microsoft 2026 · Privacy · Terms of use</div>
+  </footer>
+</body>
+</html>

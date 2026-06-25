@@ -42,6 +42,17 @@ export function localScreenshotPath(screenshotAsset) {
   return existsSync(p) ? p : '';
 }
 
+// Resolve a website's bundled "before" HTML asset (e.g. 'ms-support-before.html')
+// to an absolute path under src/assets, or '' if not set / missing. When present
+// this curated HTML is used directly as the BEFORE document — no live screenshot
+// and no vision reproduction needed. This is the reliable path for pages that
+// block headless browsers (login walls / anti-bot), like support.microsoft.com.
+export function localHtmlPath(htmlAsset) {
+  if (!htmlAsset) return '';
+  const p = path.join(ASSETS_DIR, htmlAsset);
+  return existsSync(p) ? p : '';
+}
+
 // gpt-5.4 reads a page screenshot well. Override with WIREFRAME_MODEL.
 const MODEL = process.env.WIREFRAME_MODEL || 'gpt-5.4';
 // Keep hidden reasoning low so generation stays fast (reasoning, not output size,
@@ -303,11 +314,19 @@ async function generateBefore({ url, imagePath }) {
 }
 
 // Return the cached BEFORE for a website, generating + caching it on first use.
-export async function getOrCreateBefore(db, { websiteId, url, imagePath }) {
+// A bundled curated HTML asset (htmlPath), when provided, is used verbatim as the
+// BEFORE — skipping the screenshot + vision step entirely. This makes wireframes
+// reliable for pages that block headless capture (e.g. support.microsoft.com).
+export async function getOrCreateBefore(db, { websiteId, url, imagePath, htmlPath }) {
   const cached = getCachedBefore(db, websiteId);
   if (cached) return cached.before;
-  if (!url && !imagePath) throw new Error(`No URL or screenshot configured for website "${websiteId}".`);
-  const before = await generateBefore({ url, imagePath });
+  let before;
+  if (htmlPath && existsSync(htmlPath)) {
+    before = readFileSync(htmlPath, 'utf8');
+  } else {
+    if (!url && !imagePath) throw new Error(`No URL or screenshot configured for website "${websiteId}".`);
+    before = await generateBefore({ url, imagePath });
+  }
   db.prepare(`
     INSERT INTO wireframes (website_id, url, before_html, created_at)
     VALUES (?, ?, ?, ?)
@@ -434,8 +453,8 @@ function ensureChangeMarker(before, after) {
 // both documents so the UI can show a before/after pair. An optional `refinement`
 // note (from the user, e.g. "put the gear top-right, not in a menu") is layered on
 // top of the base fix so they can correct a wrong result without starting over.
-export async function applyFix(db, { websiteId, url, imagePath, painPointSummary, fixTitle, fixDescription, refinement }) {
-  const before = await getOrCreateBefore(db, { websiteId, url, imagePath });
+export async function applyFix(db, { websiteId, url, imagePath, htmlPath, painPointSummary, fixTitle, fixDescription, refinement }) {
+  const before = await getOrCreateBefore(db, { websiteId, url, imagePath, htmlPath });
   const stdout = await runCopilot(
     buildAfterPrompt({ beforeHtml: before, painPointSummary, fixTitle, fixDescription, refinement })
   );
