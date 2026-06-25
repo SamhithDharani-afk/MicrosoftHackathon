@@ -109,3 +109,51 @@ export function cleanHtml(raw) {
   if (start > 0) html = html.slice(start);
   return html.trim();
 }
+
+// Prompt for the slideshow walkthrough narration: given the changes detected on
+// the AFTER design, ask the model for specific, non-trivial "find it" / "use it"
+// captions per change (plus an overview), as STRICT JSON, so the steps teach the
+// user instead of saying "click the button".
+export function buildWalkthroughStepsPrompt({ websiteName, painPointSummary, fixTitle, fixDescription, changes }) {
+  const list = (changes || [])
+    .map((c, i) => `  ${i + 1}. the ${c.label} in the ${c.region}`)
+    .join('\n');
+  return (
+    `You are writing the narration for a short, click-by-click product walkthrough ` +
+    `that teaches a user how to discover and use a NEW UI change. Return STRICT JSON ` +
+    `ONLY — no prose, no markdown fences, nothing before or after the object.\n\n` +
+    `Product: ${websiteName || 'the app'}\n` +
+    `User pain point being solved: ${painPointSummary || 'N/A'}\n` +
+    `The change that was made: ${fixTitle || 'N/A'} — ${fixDescription || ''}\n\n` +
+    `The walkthrough is an overview slide, then for EACH change below a "find it" ` +
+    `slide and a "use it" slide, in this exact order:\n${list || '  (no changes detected)'}\n\n` +
+    `Write captions that are SPECIFIC and NON-TRIVIAL. For each change:\n` +
+    `- "find it": say what the control is for, where it now appears on screen, and ` +
+    `why that placement fixes the pain point (what users no longer have to do).\n` +
+    `- "use it": describe the exact action the user takes and what happens next ` +
+    `(the result/benefit). Mention real specifics, not filler.\n` +
+    `Never write generic filler like "Use the button" or "Find the icon". ` +
+    `Each caption is 1-2 full sentences. Titles are <= 6 words and start with "Step N:".\n\n` +
+    `Output JSON with EXACTLY this shape:\n` +
+    `{"overviewTitle": string, "overviewCaption": string, "steps": ` +
+    `[{"findTitle": string, "findCaption": string, "useTitle": string, "useCaption": string}]}\n` +
+    `The "steps" array MUST have exactly ${(changes || []).length} item(s), one per ` +
+    `change above, in the same order. Output ONLY the JSON object.`
+  );
+}
+
+// Parse the walkthrough narration JSON, tolerating code fences or stray text around
+// the object. Returns the parsed object, or null if it cannot be parsed.
+export function parseStepsJson(raw) {
+  let t = String(raw || '').trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) t = fence[1].trim();
+  const start = t.indexOf('{');
+  const end = t.lastIndexOf('}');
+  if (start >= 0 && end > start) t = t.slice(start, end + 1);
+  try {
+    return JSON.parse(t);
+  } catch {
+    return null;
+  }
+}

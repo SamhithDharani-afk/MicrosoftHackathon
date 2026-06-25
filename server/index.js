@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { feedbackEntries as seedFeedback, painPoints as curatedPainPoints, websites } from '../src/data/mockData.js';
-import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath } from './wireframe-service.js';
+import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath, generateWalkthrough as generateSlideshowWalkthrough } from './wireframe-service.js';
 import { assistFeedback } from './assist-service.js';
 import {
   ensureCoalesceTable,
@@ -333,6 +333,32 @@ app.post('/api/walkthrough', async (req, res) => {
     res.json({ walkthrough });
   } catch (e) {
     res.status(502).json({ error: String(e?.message || e) });
+  }
+});
+
+// Generate a slideshow walkthrough: apply the fix, then Playwright-screenshot the
+// resulting AFTER design into an ordered set of captioned slides (overview + a
+// find-it / use-it pair per change), narrated by the isolated Copilot CLI.
+app.post('/api/walkthrough/slideshow', async (req, res) => {
+  const b = req.body || {};
+  if (!b.websiteId || !b.fixTitle) {
+    return res.status(400).json({ error: 'websiteId and fixTitle are required' });
+  }
+  const liveUrl = resolveUrl(b.websiteId, b.url);
+  try {
+    const { slides, after } = await generateSlideshowWalkthrough(db, {
+      websiteId: String(b.websiteId),
+      url: liveUrl,
+      imagePath: resolveImage(b.websiteId),
+      htmlPath: resolveHtml(b.websiteId),
+      websiteName: websites.find((w) => w.id === b.websiteId)?.name || '',
+      painPointSummary: b.painPointSummary || '',
+      fixTitle: String(b.fixTitle),
+      fixDescription: b.fixDescription || '',
+    });
+    res.json({ slides, after });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
   }
 });
 

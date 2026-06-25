@@ -152,3 +152,19 @@ export async function generateWalkthrough(painPoint, websiteName, refinement) {
   }
   return data.walkthrough;
 }
+
+// Generate a Playwright-screenshot slideshow walkthrough for the proposed change:
+// the server applies the fix, captures the redesigned wireframe as slides, and
+// returns an ordered set of captioned PNG slides. Used by WalkthroughSlideshow.
+export async function generateSlideshowWalkthrough(payload) {
+  const res = await fetch('/api/walkthrough/slideshow', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !Array.isArray(data.slides) || data.slides.length === 0) {
+    throw new Error(data?.error || `Failed to generate walkthrough (${res.status})`);
+  }
+  return data; // { slides, after }
+}
