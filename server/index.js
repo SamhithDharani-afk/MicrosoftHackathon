@@ -345,6 +345,8 @@ app.post('/api/process-flow', async (req, res) => {
   const { painPoint, websiteName, refinement } = req.body || {};
   if (!painPoint?.id) return res.status(400).json({ error: 'painPoint is required' });
   if (!hasToken()) return res.status(503).json({ error: 'AI unavailable: set GITHUB_TOKEN on the server.' });
+  try {
+    const flow = await generateProcessFlow(db, { painPoint, websiteName, refinement });
     res.json({ flow });
   } catch (e) {
     res.status(502).json({ error: String(e?.message || e) });
@@ -398,6 +400,7 @@ app.post('/api/dev-prompt', async (req, res) => {
       res.status(502).json({ error: e.message });
     }
   }
+});
 
 app.listen(PORT, () => {
   console.log(`[api] feedback server listening on http://localhost:${PORT}`);

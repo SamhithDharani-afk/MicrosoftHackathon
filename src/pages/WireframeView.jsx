@@ -7,7 +7,6 @@ import { fetchWireframe, generateAfter, fetchScreenshot, fetchPainPoints } from 
 import { useWebsites } from '../context/WebsitesContext';
 import RefineBox from '../components/RefineBox';
 import DevPromptButton from '../components/DevPromptButton';
-import AIPromptPanel from '../components/AIPromptPanel';
 
 function WireframePanel({ type, data, showCallouts = false }) {
   const isAfter = type === 'after';
@@ -1066,17 +1065,6 @@ export default function WireframeView() {
         </div>
       )}
 
-      {/* Embedded AI prompt helper — turn this change into a copy-paste dev prompt */}
-      <AIPromptPanel
-        context={{
-          kind: 'wireframe',
-          websiteName: ctx.websiteName,
-          url: ctx.url,
-          painPointSummary: ctx.painPointSummary,
-          title: ctx.title,
-          description: ctx.description,
-        }}
-      />
     </div>
   );
 }

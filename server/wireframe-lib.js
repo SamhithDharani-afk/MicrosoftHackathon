@@ -60,7 +60,7 @@ export function buildAfterPrompt({ beforeHtml, painPointSummary, fixTitle, fixDe
     `one leaf element for each part (so there may be several tagged elements); if it ` +
     `is a single change, tag exactly one. Do not tag unrelated, unchanged elements. ` +
     `Example: <button data-ff-new="true" class="...">+ New post</button>. This ` +
-    `attribute renders nothing visible by itself — it is a hook used later to `
+    `attribute renders nothing visible by itself — it is a hook used later to ` +
     `highlight the change — so it does NOT count as a visible label. Omitting it is a ` +
     `failure.\n\n` +
     `RULES (follow exactly):\n` +
