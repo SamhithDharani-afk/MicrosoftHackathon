@@ -38,21 +38,34 @@ export default function PainPointDetail() {
     [websiteName]
   );
 
+  const statePainPoint = location.state?.painPoint;
+  const stateWebsiteId = location.state?.website?.id;
+
   useEffect(() => {
     let active = true;
-    fetchPainPoints()
-      .then(async ({ painPoints: all }) => {
-        const pp = all.find((p) => p.id === id) || null;
-        if (!active) return;
-        setPainPoint(pp);
-        if (pp) {
-          const fb = await fetchFeedback(pp.websiteId).catch(() => []);
-          if (active) setRelated(fb.filter((f) => pp.relatedFeedback?.includes(f.id)));
-        }
-      })
+
+    const hydrate = async (pp) => {
+      if (!active) return;
+      setPainPoint(pp);
+      if (pp) {
+        const fb = await fetchFeedback(pp.websiteId).catch(() => []);
+        if (active) setRelated(fb.filter((f) => pp.relatedFeedback?.includes(f.id)));
+      }
+    };
+
+    // Prefer the pain point passed via navigation state. Dynamic, per-website
+    // pain points (e.g. ms-support's) only exist in that website's analysis, so a
+    // websiteId-less fetch wouldn't find them — hence "Pain point not found".
+    if (statePainPoint && statePainPoint.id === id) {
+      hydrate(statePainPoint);
+      return () => { active = false; };
+    }
+
+    fetchPainPoints(stateWebsiteId)
+      .then(({ painPoints: all }) => hydrate(all.find((p) => p.id === id) || null))
       .catch(() => active && setPainPoint(null));
     return () => { active = false; };
-  }, [id]);
+  }, [id, statePainPoint, stateWebsiteId]);
 
   // When arriving from the dashboard "Generate Walkthrough" button, auto-generate
   // for pain points that don't have a curated walkthrough.

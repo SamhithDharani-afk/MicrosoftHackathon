@@ -87,9 +87,31 @@ function resolveCopilot() {
 
 const COPILOT_BIN = resolveCopilot();
 
-// Seed the ephemeral home once with auth + config, but no session state.
+// Refresh the small top-level auth/config FILES from the real home. The Copilot
+// CLI rotates its OAuth access token periodically; if we seeded the ephemeral home
+// once and never updated it, the copied token eventually expires and every spawned
+// call fails with "Authentication token found but could not be validated" (401).
+// Re-copying the top-level files on each call is cheap and keeps credentials fresh.
+// Heavy subdirectories (bin, skills, ide, …) are left untouched after first seed.
+function refreshEphemeralAuth() {
+  for (const entry of readdirSync(REAL_HOME, { withFileTypes: true })) {
+    if (!entry.isFile() || !shouldCopyHomeEntry(entry.name)) continue;
+    try {
+      cpSync(path.join(REAL_HOME, entry.name), path.join(EPHEMERAL_HOME, entry.name));
+    } catch {
+      // best-effort: a locked/transient file shouldn't abort the call
+    }
+  }
+}
+
+// Seed the ephemeral home with auth + config, but no session state. The full copy
+// runs once; the auth-bearing top-level files are refreshed on every call so a
+// rotated token never goes stale (see refreshEphemeralAuth).
 function ensureEphemeralHome() {
-  if (existsSync(path.join(EPHEMERAL_HOME, 'config.json'))) return;
+  if (existsSync(path.join(EPHEMERAL_HOME, 'config.json'))) {
+    refreshEphemeralAuth();
+    return;
+  }
   mkdirSync(EPHEMERAL_HOME, { recursive: true });
   for (const entry of readdirSync(REAL_HOME, { withFileTypes: true })) {
     if (!shouldCopyHomeEntry(entry.name)) continue;

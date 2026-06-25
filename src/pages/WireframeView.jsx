@@ -645,10 +645,19 @@ export default function WireframeView() {
     setBeforeError('');
     fetchWireframe(ctx.websiteId, ctx.url)
       .then((data) => {
-        if (active) setBefore(data.before || '');
+        if (!active) return;
+        const html = data.before || '';
+        setBefore(html);
+        // No faithful HTML reproduction available (e.g. the Copilot reproduction
+        // is unavailable). Rather than drop to a low-fidelity boxes-and-lines
+        // wireframe, show the real live screenshot — it looks like the actual
+        // website, which is what the "current design" panel is meant to convey.
+        if (!html && ctx.url) setBeforeMode('live');
       })
       .catch((err) => {
-        if (active) setBeforeError(err.message || 'Failed to load the current design.');
+        if (!active) return;
+        setBeforeError(err.message || 'Failed to load the current design.');
+        if (ctx.url) setBeforeMode('live'); // fall back to a real screenshot
       })
       .finally(() => {
         if (active) setBeforeLoading(false);
