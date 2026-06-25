@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { feedbackEntries as seedFeedback, painPoints as curatedPainPoints, websites } from '../src/data/mockData.js';
-import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath, generateWalkthrough as generateSlideshowWalkthrough, generateDevPrompt as generateWireframeDevPrompt } from './wireframe-service.js';
+import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath, generateWalkthrough as generateSlideshowWalkthrough, generateDevPrompt as generateWireframeDevPrompt, generateWalkthroughVideo } from './wireframe-service.js';
 import { assistFeedback } from './assist-service.js';
 import { hasToken } from './github-models.js';
 import {
@@ -313,6 +313,30 @@ app.post('/api/walkthrough/slideshow', async (req, res) => {
   }
 });
 
+// Generate a simulated-usage GIF: apply the fix, then render a fake cursor finding
+// and "using" each change frame by frame, returned as an animated GIF data URL.
+app.post('/api/walkthrough-video', async (req, res) => {
+  const b = req.body || {};
+  if (!b.websiteId || !b.fixTitle) {
+    return res.status(400).json({ error: 'websiteId and fixTitle are required' });
+  }
+  const liveUrl = resolveUrl(b.websiteId, b.url);
+  try {
+    const { gif, changeCount, after } = await generateWalkthroughVideo(db, {
+      websiteId: String(b.websiteId),
+      url: liveUrl,
+      imagePath: resolveImage(b.websiteId),
+      websiteName: websites.find((w) => w.id === b.websiteId)?.name || '',
+      painPointSummary: b.painPointSummary || '',
+      fixTitle: String(b.fixTitle),
+      fixDescription: b.fixDescription || '',
+    });
+    res.json({ gif, changeCount, after });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // ── AI-generated solution artifacts (per pain point) ───────────────────────
 // Both endpoints take the pain point itself so they work for ANY pain point —
 // curated or AI-clustered — not just the bundled demo solutions. Results are
@@ -321,8 +345,6 @@ app.post('/api/process-flow', async (req, res) => {
   const { painPoint, websiteName, refinement } = req.body || {};
   if (!painPoint?.id) return res.status(400).json({ error: 'painPoint is required' });
   if (!hasToken()) return res.status(503).json({ error: 'AI unavailable: set GITHUB_TOKEN on the server.' });
-  try {
-    const flow = await generateProcessFlow(db, { painPoint, websiteName, refinement });
     res.json({ flow });
   } catch (e) {
     res.status(502).json({ error: String(e?.message || e) });

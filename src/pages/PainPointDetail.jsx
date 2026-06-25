@@ -1,11 +1,12 @@
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { ArrowLeft, Play, ChevronRight, MessageSquare, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Play, ChevronRight, MessageSquare, AlertCircle, Sparkles, RefreshCw, Clapperboard } from 'lucide-react';
 import { fetchPainPoints, fetchFeedback, generateWalkthrough } from '../utils/api';
 import { severityMeta } from '../utils/severity';
 import RefineBox from '../components/RefineBox';
 import DevPromptButton from '../components/DevPromptButton';
 import WalkthroughSlideshow from '../components/WalkthroughSlideshow';
+import WalkthroughVideo from '../components/WalkthroughVideo';
 
 export default function PainPointDetail() {
   const { id } = useParams();
@@ -217,6 +218,27 @@ export default function PainPointDetail() {
               Generate a step-by-step guide showing how the proposed fix solves this pain point.
             </p>
           )}
+        </section>
+      )}
+
+      {/* Simulated usage video — a fake cursor finds and uses each change */}
+      {painPoint.websiteId && (
+        <section className="mb-10">
+          <h2 className="text-xl font-bold text-white mb-1.5 flex items-center gap-2">
+            <Clapperboard className="w-5 h-5 text-purple-400" />
+            Simulated Usage Video
+          </h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Watch a simulated cursor discover and use{' '}
+            <span className="text-gray-300">{fix.title}</span> on the redesigned
+            wireframe — a narration-free clip that plays like a real customer trying it.
+          </p>
+          <WalkthroughVideo
+            websiteId={painPoint.websiteId}
+            painPointSummary={painPoint.summary}
+            fixTitle={fix.title}
+            fixDescription={fix.description}
+          />
         </section>
       )}
 
