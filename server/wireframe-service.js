@@ -391,7 +391,14 @@ async function captureWalkthroughSlides(afterHtml, { websiteName, fixTitle, fixD
     });
 
     // 2) One "find it" + one "use it" slide per tagged change.
-    const handles = await page.$$('[data-ff-new]');
+    // Prune wrapper elements — keep only leaf-level marked elements (same logic as
+    // the client-side handleIframeLoad pruning so slide count matches the UI count).
+    const allHandles = await page.$$('[data-ff-new]');
+    const handles = [];
+    for (const handle of allHandles) {
+      const isWrapper = await handle.evaluate((el) => !!el.querySelector('[data-ff-new]'));
+      if (!isWrapper) handles.push(handle);
+    }
     let step = 1;
     let changeIndex = 0;
     for (const handle of handles) {

@@ -44,11 +44,8 @@ export default function WalkthroughSlideshow({ websiteId, painPointSummary, fixT
   }, []);
 
   const go = useCallback((dir) => {
-    setSlides((s) => {
-      if (s.length) setCurrent((c) => (c + dir + s.length) % s.length);
-      return s;
-    });
-  }, []);
+    if (slides.length) setCurrent((c) => (c + dir + slides.length) % slides.length);
+  }, [slides.length]);
 
   // Autoplay: advance every 3.2s while playing.
   useEffect(() => {

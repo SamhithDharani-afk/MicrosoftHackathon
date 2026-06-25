@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Sparkles, Copy, Check, RefreshCw, ExternalLink, Wand2 } from 'lucide-react';
 import { buildDevPrompt } from '../utils/devPrompt';
 import { generateDevPrompt } from '../utils/api';
@@ -15,6 +15,13 @@ export default function AIPromptPanel({ context }) {
   const [refining, setRefining] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Re-sync prompt when the context changes (e.g. navigating between pain points).
+  useEffect(() => {
+    setPrompt(template);
+    setSource('template');
+    setError('');
+  }, [template]);
 
   const handleCopy = useCallback(async () => {
     try {
