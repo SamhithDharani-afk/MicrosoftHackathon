@@ -21,6 +21,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import gifenc from 'gifenc';
+import { PNG } from 'pngjs';
+
+const { GIFEncoder, quantize, applyPalette } = gifenc;
 import {
   buildBeforePrompt,
   buildAfterPrompt,
@@ -452,6 +456,191 @@ async function captureWalkthroughSlides(afterHtml, { websiteName, fixTitle, fixD
   }
 }
 
+// ── Simulated-usage GIF (frame-by-frame, no native deps) ───────
+// We render the AFTER design, then drive a fake pointer to each change one frame at
+// a time (deterministic — no reliance on video codecs or recording timing). Each
+// frame is a screenshot we decode, downscale, and feed to a pure-JS GIF encoder, so
+// the result is a plain animated GIF that embeds reliably as <img> anywhere.
+const GIF_CURSOR_CSS =
+  '[data-ff-mark]{outline:3px solid #ef4444 !important;outline-offset:3px !important;' +
+  'border-radius:6px !important;box-shadow:0 0 0 6px rgba(239,68,68,.18) !important;}' +
+  '#ff-cursor{position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;' +
+  'will-change:transform;filter:drop-shadow(0 2px 4px rgba(0,0,0,.45));}' +
+  '#ff-ripple{position:fixed;left:0;top:0;z-index:2147483646;width:48px;height:48px;' +
+  'border-radius:50%;pointer-events:none;display:none;' +
+  'background:radial-gradient(circle,rgba(59,130,246,.65),rgba(59,130,246,0) 70%);}';
+
+const GIF_WIDTH = 760; // output GIF width; height scales to the 1280x900 design
+const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+// Area-average downscale of an RGBA buffer (sw×sh -> dw×dh). Keeps the GIF small
+// and smooth without a native image library.
+function downscaleRGBA(src, sw, sh, dw, dh) {
+  const dst = new Uint8Array(dw * dh * 4);
+  const xr = sw / dw;
+  const yr = sh / dh;
+  for (let y = 0; y < dh; y += 1) {
+    const sy0 = Math.floor(y * yr);
+    const sy1 = Math.max(sy0 + 1, Math.floor((y + 1) * yr));
+    for (let x = 0; x < dw; x += 1) {
+      const sx0 = Math.floor(x * xr);
+      const sx1 = Math.max(sx0 + 1, Math.floor((x + 1) * xr));
+      let r = 0; let g = 0; let b = 0; let a = 0; let n = 0;
+      for (let sy = sy0; sy < sy1 && sy < sh; sy += 1) {
+        for (let sx = sx0; sx < sx1 && sx < sw; sx += 1) {
+          const i = (sy * sw + sx) * 4;
+          r += src[i]; g += src[i + 1]; b += src[i + 2]; a += src[i + 3]; n += 1;
+        }
+      }
+      const di = (y * dw + x) * 4;
+      dst[di] = (r / n) | 0;
+      dst[di + 1] = (g / n) | 0;
+      dst[di + 2] = (b / n) | 0;
+      dst[di + 3] = (a / n) | 0;
+    }
+  }
+  return dst;
+}
+
+// Build the simulated-usage GIF. Returns a base64 image/gif data URL + change count.
+async function captureWalkthroughGif(afterHtml) {
+  let browser;
+  try {
+    browser = await chromium.launch();
+    const page = await browser.newPage({ viewport: VIEWPORT });
+    try {
+      await page.setContent(afterHtml, { waitUntil: 'networkidle', timeout: 30000 });
+    } catch {
+      await page.setContent(afterHtml, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    }
+    await page.addStyleTag({ content: GIF_CURSOR_CSS });
+
+    // Inject the pointer + ripple. Movement is set explicitly per frame (no CSS
+    // transition) so every captured frame is exactly where we want it.
+    await page.evaluate(() => {
+      const c = document.createElement('div');
+      c.id = 'ff-cursor';
+      c.innerHTML =
+        '<svg width="28" height="28" viewBox="0 0 24 24">' +
+        '<path d="M4 2l15.5 7.6-6.7 1.7L9.6 20 4 2z" fill="#0f172a" stroke="#fff" ' +
+        'stroke-width="1.4" stroke-linejoin="round"/></svg>';
+      document.body.appendChild(c);
+      const ripple = document.createElement('div');
+      ripple.id = 'ff-ripple';
+      document.body.appendChild(ripple);
+      window.__ff = {
+        frame(x, y, scale, rip) {
+          c.style.transform = `translate(${x - 4}px,${y - 2}px) scale(${scale})`;
+          if (rip > 0 && rip < 1) {
+            ripple.style.display = 'block';
+            ripple.style.transform = `translate(${x - 24}px,${y - 24}px) scale(${0.3 + rip * 2.4})`;
+            ripple.style.opacity = String((1 - rip) * 0.6);
+          } else {
+            ripple.style.display = 'none';
+          }
+        },
+      };
+    });
+
+    // Resolve the targets (viewport-relative centers of each tagged change).
+    const handles = await page.$$('[data-ff-new]');
+    const targets = [];
+    for (const handle of handles.slice(0, 4)) {
+      const rect = await handle.evaluate((el) => {
+        el.scrollIntoView({ block: 'center', inline: 'center' });
+        const r = el.getBoundingClientRect();
+        return { x: r.left, y: r.top, w: r.width, h: r.height };
+      });
+      if (!rect || (rect.w === 0 && rect.h === 0)) continue;
+      targets.push({ handle, cx: Math.round(rect.x + rect.w / 2), cy: Math.round(rect.y + rect.h / 2) });
+    }
+
+    // Collect frames as { rgba, delay }. We downscale immediately to cap memory.
+    const dw = GIF_WIDTH;
+    const dh = Math.round((VIEWPORT.height / VIEWPORT.width) * dw);
+    const frames = [];
+    const snap = async (delay) => {
+      const png = await page.screenshot({ type: 'png' });
+      const { data, width, height } = PNG.sync.read(png);
+      frames.push({ rgba: downscaleRGBA(data, width, height, dw, dh), delay });
+    };
+    const setCursor = (x, y, scale, rip) =>
+      page.evaluate(([px, py, s, r]) => window.__ff.frame(px, py, s, r), [x, y, scale, rip]);
+
+    let pos = { x: Math.round(VIEWPORT.width * 0.5), y: Math.round(VIEWPORT.height * 0.74) };
+    await setCursor(pos.x, pos.y, 1, 0);
+
+    // Intro: hold on the clean design.
+    for (let i = 0; i < 4; i += 1) await snap(140);
+
+    for (const t of targets) {
+      // Glide to the control.
+      const from = pos;
+      const STEPS = 10;
+      for (let i = 1; i <= STEPS; i += 1) {
+        const e = easeInOut(i / STEPS);
+        const x = Math.round(from.x + (t.cx - from.x) * e);
+        const y = Math.round(from.y + (t.cy - from.y) * e);
+        await setCursor(x, y, 1, 0); // eslint-disable-line no-await-in-loop
+        await snap(60); // eslint-disable-line no-await-in-loop
+      }
+      pos = { x: t.cx, y: t.cy };
+
+      // Highlight the change.
+      await t.handle.evaluate((el) => el.setAttribute('data-ff-mark', 'true'));
+      for (let i = 0; i < 3; i += 1) await snap(120);
+
+      // Click: ripple expands while the pointer presses in.
+      const RIP = 6;
+      for (let i = 1; i <= RIP; i += 1) {
+        const r = i / RIP;
+        await setCursor(pos.x, pos.y, i <= 2 ? 0.82 : 1, r); // eslint-disable-line no-await-in-loop
+        await snap(70); // eslint-disable-line no-await-in-loop
+      }
+      await setCursor(pos.x, pos.y, 1, 0);
+
+      // Dwell so the action registers, then clear the highlight.
+      for (let i = 0; i < 5; i += 1) await snap(130);
+      await t.handle.evaluate((el) => el.removeAttribute('data-ff-mark'));
+      await snap(120);
+    }
+
+    if (!targets.length) {
+      // Nothing tagged — drift the cursor so the GIF is not a static frame.
+      const to = { x: Math.round(VIEWPORT.width * 0.5), y: Math.round(VIEWPORT.height * 0.42) };
+      for (let i = 1; i <= 10; i += 1) {
+        const e = easeInOut(i / 10);
+        await setCursor(Math.round(pos.x + (to.x - pos.x) * e), Math.round(pos.y + (to.y - pos.y) * e), 1, 0); // eslint-disable-line no-await-in-loop
+        await snap(80); // eslint-disable-line no-await-in-loop
+      }
+    }
+
+    // Outro hold (also the loop seam).
+    for (let i = 0; i < 4; i += 1) await snap(150);
+
+    // Encode. Build one shared palette from sampled frames so colors stay stable
+    // (no per-frame flicker) and the accent red/blue are represented.
+    const sample = [];
+    const stride = Math.max(1, Math.floor(frames.length / 6));
+    for (let i = 0; i < frames.length; i += stride) sample.push(frames[i].rgba);
+    const merged = new Uint8Array(sample.reduce((n, f) => n + f.length, 0));
+    let off = 0;
+    for (const f of sample) { merged.set(f, off); off += f.length; }
+    const palette = quantize(merged, 256);
+
+    const gif = GIFEncoder();
+    for (const f of frames) {
+      const index = applyPalette(f.rgba, palette);
+      gif.writeFrame(index, dw, dh, { palette, delay: f.delay });
+    }
+    gif.finish();
+    const buf = Buffer.from(gif.bytes());
+    return { gif: `data:image/gif;base64,${buf.toString('base64')}`, changeCount: targets.length };
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
 // Ask the isolated Copilot CLI to narrate the walkthrough for the detected changes,
 // returning specific step captions. Returns null (callers keep the deterministic
 // fallback captions) on any failure or malformed output.
@@ -511,6 +700,16 @@ export async function generateWalkthrough(db, opts) {
   }
   // Strip internal slot metadata before sending to the client.
   return { slides: slides.map(({ slot: _slot, ...s }) => s), after };
+}
+
+// Generate a simulated-usage GIF for a proposed change: apply the fix to get the
+// AFTER html, then render a fake cursor finding and "using" each change, frame by
+// frame, encoded as an animated GIF that embeds reliably as an <img>.
+export async function generateWalkthroughVideo(db, opts) {
+  const { after } = await applyFix(db, opts);
+  const { gif, changeCount } = await captureWalkthroughGif(after);
+  if (!gif) throw new Error('Could not render the walkthrough GIF.');
+  return { gif, changeCount, after };
 }
 
 // Ask the isolated Copilot CLI to write a developer-ready prompt (for an external AI

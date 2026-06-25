@@ -80,6 +80,22 @@ export async function generateWalkthrough(payload) {
   return data; // { slides, after }
 }
 
+// Generate a simulated-usage GIF for the proposed change: the server applies the
+// fix, then renders a fake cursor finding and "using" each change frame by frame,
+// returning an animated GIF as a data URL that embeds as a plain <img>.
+export async function generateWalkthroughVideo(payload) {
+  const res = await fetch('/api/walkthrough-video', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.gif) {
+    throw new Error(data?.error || `Failed to generate simulation (${res.status})`);
+  }
+  return data; // { gif, changeCount, after }
+}
+
 // Ask the backend (isolated Copilot CLI) to refine a developer-ready prompt for the
 // proposed change, tailored so it can be pasted into any external AI coding assistant.
 export async function generateDevPrompt(payload) {
