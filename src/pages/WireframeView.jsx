@@ -267,10 +267,11 @@ function neutralizeLinks(rawHtml) {
 
 // CSS injected INTO the generated "after" document so the changed element — tagged
 // by the model with data-ff-new="true" — is clearly highlighted. It gets a thick red
-// outline + soft pulsing glow, and a bold "NEW" pill sitting just below the element
-// with a large triangle arrow pointing straight up at it. Placing it below (arrow up)
-// keeps the marker visible even when the change is in a top bar. Because it lives
-// inside the iframe it sits exactly on the change and scales with the page.
+// outline + soft pulsing glow, and a long red arrow (drawn with clip-path) sitting
+// below the element pointing straight up at it, with a small de-emphasized "NEW"
+// label beneath the arrow. Placing it below (arrow up) keeps the marker visible even
+// when the change is in a top bar. It lives inside the iframe so it sits exactly on
+// the change and scales with the page.
 const CHANGE_MARKER_STYLE =
   '<style id="ff-change-markers">' +
   '@keyframes ffPulse{0%,100%{box-shadow:0 0 0 4px rgba(239,68,68,.18)}' +
@@ -278,15 +279,15 @@ const CHANGE_MARKER_STYLE =
   '[data-ff-new]{position:relative !important;outline:3px solid #ef4444 !important;' +
   'outline-offset:3px !important;border-radius:6px !important;' +
   'animation:ffPulse 1.6s ease-in-out infinite !important;}' +
-  '[data-ff-new]::after{content:"NEW";position:absolute;top:calc(100% + 18px);' +
-  'left:50%;transform:translateX(-50%);background:#ef4444;color:#fff;' +
-  'font:800 14px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.08em;' +
-  'padding:7px 12px;border-radius:7px;box-shadow:0 6px 16px rgba(0,0,0,.45);' +
+  '[data-ff-new]::after{content:"";position:absolute;top:calc(100% + 4px);' +
+  'left:50%;transform:translateX(-50%);width:24px;height:92px;background:#ef4444;' +
+  'clip-path:polygon(50% 0,100% 40%,66% 40%,66% 100%,34% 100%,34% 40%,0 40%);' +
+  'filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));' +
+  'z-index:2147483647;pointer-events:none;}' +
+  '[data-ff-new]::before{content:"NEW";position:absolute;top:calc(100% + 100px);' +
+  'left:50%;transform:translateX(-50%);color:#ef4444;' +
+  'font:700 10px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.1em;' +
   'z-index:2147483647;pointer-events:none;white-space:nowrap;}' +
-  '[data-ff-new]::before{content:"";position:absolute;top:calc(100% + 2px);left:50%;' +
-  'transform:translateX(-50%);border-left:11px solid transparent;' +
-  'border-right:11px solid transparent;border-bottom:18px solid #ef4444;' +
-  'filter:drop-shadow(0 2px 2px rgba(0,0,0,.35));z-index:2147483647;pointer-events:none;}' +
   '</style>';
 
 // Insert the marker CSS into a generated document (before </head>, else after <body>,
