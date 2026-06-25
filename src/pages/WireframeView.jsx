@@ -266,18 +266,28 @@ function neutralizeLinks(rawHtml) {
 }
 
 // CSS injected INTO the generated "after" document so the changed element — tagged
-// by the model with data-ff-new="true" — gets a subtle red outline and a small
-// "NEW ▼" arrow that points right at it. Because it lives inside the iframe, it sits
-// exactly on the change and scales with the page (no cross-origin DOM access needed).
+// by the model with data-ff-new="true" — is clearly highlighted. It gets a thick red
+// outline + soft pulsing glow, and a bold "NEW" pill sitting just below the element
+// with a large triangle arrow pointing straight up at it. Placing it below (arrow up)
+// keeps the marker visible even when the change is in a top bar. Because it lives
+// inside the iframe it sits exactly on the change and scales with the page.
 const CHANGE_MARKER_STYLE =
   '<style id="ff-change-markers">' +
-  '[data-ff-new]{position:relative !important;outline:2px solid #ef4444 !important;' +
-  'outline-offset:3px !important;border-radius:6px !important;}' +
-  '[data-ff-new]::after{content:"NEW \\25BC";position:absolute;top:-20px;right:-6px;' +
-  'background:#ef4444;color:#fff;font:700 10px/1 ui-sans-serif,system-ui,-apple-system,' +
-  'sans-serif;letter-spacing:.04em;padding:4px 6px;border-radius:5px;' +
-  'box-shadow:0 2px 6px rgba(0,0,0,.35);z-index:2147483647;pointer-events:none;' +
-  'white-space:nowrap;}</style>';
+  '@keyframes ffPulse{0%,100%{box-shadow:0 0 0 4px rgba(239,68,68,.18)}' +
+  '50%{box-shadow:0 0 0 10px rgba(239,68,68,.30)}}' +
+  '[data-ff-new]{position:relative !important;outline:3px solid #ef4444 !important;' +
+  'outline-offset:3px !important;border-radius:6px !important;' +
+  'animation:ffPulse 1.6s ease-in-out infinite !important;}' +
+  '[data-ff-new]::after{content:"NEW";position:absolute;top:calc(100% + 18px);' +
+  'left:50%;transform:translateX(-50%);background:#ef4444;color:#fff;' +
+  'font:800 14px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.08em;' +
+  'padding:7px 12px;border-radius:7px;box-shadow:0 6px 16px rgba(0,0,0,.45);' +
+  'z-index:2147483647;pointer-events:none;white-space:nowrap;}' +
+  '[data-ff-new]::before{content:"";position:absolute;top:calc(100% + 2px);left:50%;' +
+  'transform:translateX(-50%);border-left:11px solid transparent;' +
+  'border-right:11px solid transparent;border-bottom:18px solid #ef4444;' +
+  'filter:drop-shadow(0 2px 2px rgba(0,0,0,.35));z-index:2147483647;pointer-events:none;}' +
+  '</style>';
 
 // Insert the marker CSS into a generated document (before </head>, else after <body>,
 // else prepend). Only used for the "after" frame.
@@ -364,7 +374,7 @@ function GeneratedFrame({ html, kind, url }) {
         {hasChange && (
           <span className="inline-flex items-center gap-1.5 text-red-400">
             <span className="inline-block w-3 h-3 rounded-sm border-2 border-red-500" />
-            red outline + “NEW ▼” marks the change
+            red outline + “NEW ▲” arrow marks the change
           </span>
         )}
       </div>
