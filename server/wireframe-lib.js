@@ -47,14 +47,22 @@ export function buildAfterPrompt({ beforeHtml, painPointSummary, fixTitle, fixDe
     `Here is the complete HTML of a web page:\n"""\n${String(beforeHtml || '')}\n"""\n\n` +
     `User feedback / pain point: '${painPointSummary || 'N/A'}'.\n` +
     `Apply ONLY this change to the page: '${fixTitle} — ${fixDescription}'.\n\n` +
+    `CRITICAL — TAG THE CHANGE (do this every time):\n` +
+    `On the single HTML element you add or modify to implement the fix, add the ` +
+    `attribute data-ff-new="true". Add it to exactly ONE element and to no other ` +
+    `element. Example: <button data-ff-new="true" class="...">Settings</button>. ` +
+    `This attribute renders nothing visible by itself — it is a hook used later to ` +
+    `highlight the change — so it does NOT count as a visible label. Omitting it is a ` +
+    `failure.\n\n` +
     `RULES (follow exactly):\n` +
     `- Keep everything else byte-for-byte identical so the fix is the only visible ` +
     `difference. Same layout, palette, text, fonts and proportions otherwise.\n` +
     `- Stay self-contained: inline <style> only, no external/network requests, no ` +
     `<img>, no SVG, no scripts, no libraries.\n` +
-    `- ZERO commentary or meta-text. Do NOT add captions, legends, callouts, badges, ` +
-    `"NEW"/"Added"/"Changed"/"Before"/"After" labels, arrows, or notes. The page must ` +
-    `look like the real website with the fix in place, not an explanation of your edit.\n\n` +
+    `- ZERO VISIBLE commentary or meta-text. Do NOT draw any captions, legends, ` +
+    `callouts, badges, visible "NEW"/"Added"/"Changed"/"Before"/"After" text, arrows, ` +
+    `or notes on the page. The page must look like the real website with the fix in ` +
+    `place. (The invisible data-ff-new attribute above is still required.)\n\n` +
     `Output ONLY the full modified HTML document. ` +
     `No explanation, no markdown fences, no commentary before or after it.`
   );

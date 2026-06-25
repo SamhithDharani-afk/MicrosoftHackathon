@@ -257,6 +257,29 @@ export async function getOrCreateBefore(db, { websiteId, url, imagePath }) {
   return before;
 }
 
+// Deterministic fallback: if the model did not tag the change with data-ff-new,
+// diff the AFTER against the BEFORE and tag the first opening tag on a line that is
+// new/changed in the AFTER. Guarantees the UI always has a change anchor to point at.
+function ensureChangeMarker(before, after) {
+  if (/data-ff-new/i.test(after)) return after;
+  const beforeLines = new Set(String(before).split(/\r?\n/).map((l) => l.trim()));
+  const afterLines = String(after).split(/\r?\n/);
+  for (let i = 0; i < afterLines.length; i += 1) {
+    const trimmed = afterLines[i].trim();
+    if (!trimmed || beforeLines.has(trimmed)) continue;
+    // Tag the first opening tag on this changed line (skip closing tags / comments).
+    const replaced = afterLines[i].replace(/<([a-zA-Z][\w-]*)((?:\s[^>]*?)?)(\/?)>/, (m, tag, attrs, selfClose) => {
+      if (/data-ff-new/i.test(m)) return m;
+      return `<${tag}${attrs} data-ff-new="true"${selfClose}>`;
+    });
+    if (replaced !== afterLines[i]) {
+      afterLines[i] = replaced;
+      return afterLines.join('\n');
+    }
+  }
+  return after;
+}
+
 // Apply ONLY the proposed fix to the cached BEFORE html, on the fly, returning
 // both documents so the UI can show a before/after pair.
 export async function applyFix(db, { websiteId, url, imagePath, painPointSummary, fixTitle, fixDescription }) {
@@ -266,7 +289,7 @@ export async function applyFix(db, { websiteId, url, imagePath, painPointSummary
   );
   const after = cleanHtml(extractAnswer(stdout));
   if (!after) throw new Error('Model returned no HTML for the proposed change.');
-  return { before, after };
+  return { before, after: ensureChangeMarker(before, after) };
 }
 
 export { EPHEMERAL_HOME, MODEL };

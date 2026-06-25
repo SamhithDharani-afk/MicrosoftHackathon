@@ -265,6 +265,29 @@ function neutralizeLinks(rawHtml) {
   });
 }
 
+// CSS injected INTO the generated "after" document so the changed element — tagged
+// by the model with data-ff-new="true" — gets a subtle red outline and a small
+// "NEW ▼" arrow that points right at it. Because it lives inside the iframe, it sits
+// exactly on the change and scales with the page (no cross-origin DOM access needed).
+const CHANGE_MARKER_STYLE =
+  '<style id="ff-change-markers">' +
+  '[data-ff-new]{position:relative !important;outline:2px solid #ef4444 !important;' +
+  'outline-offset:3px !important;border-radius:6px !important;}' +
+  '[data-ff-new]::after{content:"NEW \\25BC";position:absolute;top:-20px;right:-6px;' +
+  'background:#ef4444;color:#fff;font:700 10px/1 ui-sans-serif,system-ui,-apple-system,' +
+  'sans-serif;letter-spacing:.04em;padding:4px 6px;border-radius:5px;' +
+  'box-shadow:0 2px 6px rgba(0,0,0,.35);z-index:2147483647;pointer-events:none;' +
+  'white-space:nowrap;}</style>';
+
+// Insert the marker CSS into a generated document (before </head>, else after <body>,
+// else prepend). Only used for the "after" frame.
+function injectChangeMarkers(rawHtml) {
+  if (!rawHtml) return rawHtml;
+  if (/<\/head>/i.test(rawHtml)) return rawHtml.replace(/<\/head>/i, `${CHANGE_MARKER_STYLE}</head>`);
+  if (/<body[^>]*>/i.test(rawHtml)) return rawHtml.replace(/(<body[^>]*>)/i, `$1${CHANGE_MARKER_STYLE}`);
+  return CHANGE_MARKER_STYLE + rawHtml;
+}
+
 // The natural design width/height the generated pages target (matches the
 // screenshot viewport used on the server). We render the iframe at this fixed size
 // and CSS-scale it so the whole page fits the column (zoom out), while still letting
@@ -291,7 +314,11 @@ function GeneratedFrame({ html, kind, url }) {
     return () => ro.disconnect();
   }, [fitWidth]);
 
-  const safeHtml = useMemo(() => neutralizeLinks(html), [html]);
+  const hasChange = isAfter && /data-ff-new/i.test(html || '');
+  const safeHtml = useMemo(() => {
+    const linksSafe = neutralizeLinks(html);
+    return isAfter ? injectChangeMarkers(linksSafe) : linksSafe;
+  }, [html, isAfter]);
 
   return (
     <div className={`rounded-xl border-2 overflow-hidden ${isAfter ? 'border-green-500/40' : 'border-red-500/40'}`}>
@@ -332,8 +359,14 @@ function GeneratedFrame({ html, kind, url }) {
           />
         </div>
       </div>
-      <div className={`px-4 py-2 text-xs font-medium ${isAfter ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-        {isAfter ? '✅ Proposed wireframe — fix applied' : '❌ Current wireframe — generated from the live page'}
+      <div className={`px-4 py-2 text-xs font-medium flex items-center gap-2 flex-wrap ${isAfter ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+        <span>{isAfter ? '✅ Proposed wireframe — fix applied' : '❌ Current wireframe — generated from the live page'}</span>
+        {hasChange && (
+          <span className="inline-flex items-center gap-1.5 text-red-400">
+            <span className="inline-block w-3 h-3 rounded-sm border-2 border-red-500" />
+            red outline + “NEW ▼” marks the change
+          </span>
+        )}
       </div>
     </div>
   );
@@ -363,7 +396,7 @@ export default function WireframeView() {
   const timerRef = useRef(null);
   useEffect(() => () => clearInterval(timerRef.current), []);
 
-  const afterCacheKey = `feedbackflow_wireframe_after_${id}`;
+  const afterCacheKey = `feedbackflow_wireframe_after_v2_${id}`;
 
   // Load the pre-generated "before" for this website (cached server-side per URL),
   // plus any previously generated "after" from localStorage.
