@@ -46,7 +46,10 @@ export function buildAfterPrompt({ beforeHtml, painPointSummary, fixTitle, fixDe
   const refineBlock = refinement && String(refinement).trim()
     ? `ADDITIONAL CORRECTION FROM THE REVIEWER (highest priority — the previous ` +
       `attempt was not quite right). Apply this on top of the change above: ` +
-      `'${String(refinement).trim()}'.\n\n`
+      `'${String(refinement).trim()}'.\n` +
+      `While applying this correction you MUST still keep exactly ONE element tagged ` +
+      `with data-ff-new="true" (on the changed/added element), and you must still NOT ` +
+      `remove, replace or relocate any element that already existed on the page.\n\n`
     : '';
   return (
     `Here is the complete HTML of a web page:\n"""\n${String(beforeHtml || '')}\n"""\n\n` +
@@ -61,6 +64,11 @@ export function buildAfterPrompt({ beforeHtml, painPointSummary, fixTitle, fixDe
     `highlight the change — so it does NOT count as a visible label. Omitting it is a ` +
     `failure.\n\n` +
     `RULES (follow exactly):\n` +
+    `- PURELY ADDITIVE: implement the fix by ADDING new element(s). Do NOT remove, ` +
+    `replace, relocate, rename, hide, restyle or otherwise alter any element, control, ` +
+    `button, nav item, link, icon or feature that already exists on the page. Every ` +
+    `existing affordance must stay exactly where and how it was — the fix must not ` +
+    `interfere with anything already on the page.\n` +
     `- Keep everything else byte-for-byte identical so the fix is the only visible ` +
     `difference. Same layout, palette, text, fonts and proportions otherwise.\n` +
     `- Stay self-contained: inline <style> only, no external/network requests, no ` +

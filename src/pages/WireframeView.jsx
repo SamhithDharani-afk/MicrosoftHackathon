@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, Sparkles, RefreshCw, Timer, Maximize2, Minimize2, LayoutTemplate, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, Sparkles, RefreshCw, Timer, Maximize2, Minimize2, LayoutTemplate, Image as ImageIcon, Locate } from 'lucide-react';
 import { wireframes } from '../data/mockData';
 import { resolveWireframeContext, buildPainPointWireframeContext } from '../utils/wireframeContext';
 import { fetchWireframe, generateAfter, fetchScreenshot, fetchPainPoints } from '../utils/api';
@@ -269,18 +269,33 @@ function neutralizeLinks(rawHtml) {
 }
 
 // CSS injected INTO the generated "after" document so the changed element — tagged
-// by the model with data-ff-new="true" — gets a subtle red outline and a small
-// "NEW ▼" arrow that points right at it. Because it lives inside the iframe, it sits
-// exactly on the change and scales with the page (no cross-origin DOM access needed).
+// by the model with data-ff-new="true" — is highlighted prominently. A red outline +
+// pulsing glow marks the element, and a large red arrow (drawn with clip-path) sits
+// below it pointing straight up, gently bobbing toward the change, with a bold "NEW"
+// badge beneath the arrow that bobs in sync. Placing it below (arrow up) keeps the
+// marker visible even for top-bar changes. It lives inside the iframe so it sits
+// exactly on the change and scales with the page.
 const CHANGE_MARKER_STYLE =
   '<style id="ff-change-markers">' +
-  '[data-ff-new]{position:relative !important;outline:2px solid #ef4444 !important;' +
-  'outline-offset:3px !important;border-radius:6px !important;}' +
-  '[data-ff-new]::after{content:"NEW \\25BC";position:absolute;top:-20px;right:-6px;' +
-  'background:#ef4444;color:#fff;font:700 10px/1 ui-sans-serif,system-ui,-apple-system,' +
-  'sans-serif;letter-spacing:.04em;padding:4px 6px;border-radius:5px;' +
-  'box-shadow:0 2px 6px rgba(0,0,0,.35);z-index:2147483647;pointer-events:none;' +
-  'white-space:nowrap;}</style>';
+  '@keyframes ffPulse{0%,100%{box-shadow:0 0 0 4px rgba(239,68,68,.18)}' +
+  '50%{box-shadow:0 0 0 11px rgba(239,68,68,.28)}}' +
+  '@keyframes ffBob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,6px)}}' +
+  '[data-ff-new]{position:relative !important;outline:3px solid #ef4444 !important;' +
+  'outline-offset:3px !important;border-radius:6px !important;' +
+  'animation:ffPulse 1.6s ease-in-out infinite !important;}' +
+  '[data-ff-new]::after{content:"";position:absolute;top:calc(100% + 6px);' +
+  'left:50%;transform:translateX(-50%);width:30px;height:108px;background:#ef4444;' +
+  'clip-path:polygon(50% 0,100% 34%,60% 34%,60% 100%,40% 100%,40% 34%,0 34%);' +
+  'filter:drop-shadow(0 2px 3px rgba(0,0,0,.35));' +
+  'animation:ffBob 1.4s ease-in-out infinite;' +
+  'z-index:2147483647;pointer-events:none;}' +
+  '[data-ff-new]::before{content:"NEW";position:absolute;top:calc(100% + 122px);' +
+  'left:50%;transform:translateX(-50%);color:#fff;background:#ef4444;' +
+  'border-radius:7px;padding:6px 13px;box-shadow:0 5px 14px rgba(239,68,68,.4);' +
+  'font:800 15px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.1em;' +
+  'animation:ffBob 1.4s ease-in-out infinite;' +
+  'z-index:2147483647;pointer-events:none;white-space:nowrap;}' +
+  '</style>';
 
 // Insert the marker CSS into a generated document (before </head>, else after <body>,
 // else prepend). Only used for the "after" frame.
@@ -300,28 +315,135 @@ const DESIGN_H = 900;
 
 // Renders a Copilot-generated wireframe (raw HTML) inside a sandboxed iframe,
 // wrapped in browser chrome so it reads as a "page". Supports fit-to-width (zoom
-// out to see everything) and actual-size (scroll around) modes.
+// out to see everything), actual-size (scroll around), and an in-place "View
+// change" zoom that focuses each data-ff-new change without scrolling.
 function GeneratedFrame({ html, kind, url }) {
   const isAfter = kind === 'after';
   const wrapRef = useRef(null);
+  const iframeRef = useRef(null);
+  const changeIdxRef = useRef(0);
+  const showIdxRef = useRef(0);
   const [fitWidth, setFitWidth] = useState(true);
-  const [scale, setScale] = useState(1);
+  const [autoScale, setAutoScale] = useState(1);
+  const [focused, setFocused] = useState(false);
+  const [focusTransform, setFocusTransform] = useState('none');
+  const [focusTick, setFocusTick] = useState(0);
+  const [changeCount, setChangeCount] = useState(0);
 
+  // The zoom applied to the iframe itself. When focused on a change we always render
+  // from the fit-to-width base and add an extra in-place zoom transform on top.
+  const baseScale = focused ? autoScale : fitWidth ? autoScale : 1;
+
+  // Track the fit-to-width ratio as the column resizes.
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return undefined;
-    const update = () => setScale(fitWidth ? Math.min(1, el.clientWidth / DESIGN_W) : 1);
+    const update = () => setAutoScale(Math.min(1, el.clientWidth / DESIGN_W));
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [fitWidth]);
+  }, []);
 
   const hasChange = isAfter && /data-ff-new/i.test(html || '');
   const safeHtml = useMemo(() => {
     const linksSafe = neutralizeLinks(html);
     return isAfter ? injectChangeMarkers(linksSafe) : linksSafe;
   }, [html, isAfter]);
+
+  // When the document changes (e.g. the user refines the design), drop any active
+  // zoom/focus so we never keep a stale transform pointing at an element that no
+  // longer exists. The iframe reloads and handleIframeLoad recounts the changes.
+  useEffect(() => {
+    setFocused(false);
+    setFocusTransform('none');
+    changeIdxRef.current = 0;
+    showIdxRef.current = 0;
+  }, [safeHtml]);
+
+  // Read the change-marked elements out of the (same-origin) iframe document.
+  const readChanges = useCallback(() => {
+    try {
+      const doc = iframeRef.current?.contentDocument;
+      if (!doc) return [];
+      return Array.from(doc.querySelectorAll('[data-ff-new]'));
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // Once the frame loads: prune over-tagging (drop the marker from any element that
+  // wraps another marked element, keeping only the leaf controls), then count the
+  // remaining changes so we can offer a "View changes" zoom.
+  const handleIframeLoad = useCallback(() => {
+    if (!isAfter) {
+      setChangeCount(0);
+      return;
+    }
+    try {
+      readChanges().forEach((el) => {
+        if (el.querySelector('[data-ff-new]')) el.removeAttribute('data-ff-new');
+      });
+    } catch {
+      /* same-origin read may fail; not critical */
+    }
+    changeIdxRef.current = 0;
+    setChangeCount(readChanges().length);
+  }, [isAfter, readChanges]);
+
+  const resetZoom = useCallback(() => {
+    setFocused(false);
+    setFocusTransform('none');
+    setFitWidth(true);
+  }, []);
+
+  // "View change": zoom IN PLACE on the next change — no scrolling. We compute a
+  // transform that scales the fit-width frame up and re-centers it on the change's
+  // arrow, clipped to the same viewport, then flash the change.
+  const viewNextChange = useCallback(() => {
+    const els = readChanges();
+    const wrap = wrapRef.current;
+    if (!els.length || !wrap) return;
+    const idx = changeIdxRef.current % els.length;
+    showIdxRef.current = idx;
+    changeIdxRef.current = idx + 1;
+
+    const el = els[idx];
+    const r = el.getBoundingClientRect(); // design-space coords (iframe not scrolled)
+    const b = autoScale; // fit-to-width base the zoom is layered on top of
+    const W = wrap.clientWidth;
+    const H = wrap.clientHeight;
+    const Z = 2.4; // how far to zoom into the change
+    // Center of the change (incl. some room below for its arrow) in fit-width px.
+    const px = (r.left + r.width / 2) * b;
+    const py = (r.top + r.height / 2 + 40) * b;
+    const tx = W / 2 - Z * px;
+    const ty = H / 2 - Z * py;
+
+    setFitWidth(true);
+    setFocused(true);
+    setFocusTransform(`translate(${tx}px, ${ty}px) scale(${Z})`);
+    setFocusTick((t) => t + 1);
+  }, [readChanges, autoScale]);
+
+  // Flash the focused change each time "View change" is clicked.
+  useEffect(() => {
+    if (!focusTick) return;
+    const els = readChanges();
+    const el = els[showIdxRef.current % (els.length || 1)];
+    if (!el) return;
+    try {
+      el.animate(
+        [
+          { boxShadow: '0 0 0 6px rgba(239,68,68,.6)' },
+          { boxShadow: '0 0 0 20px rgba(239,68,68,0)' },
+        ],
+        { duration: 900, iterations: 2 },
+      );
+    } catch {
+      /* WAAPI not critical */
+    }
+  }, [focusTick, readChanges]);
 
   return (
     <div className={`rounded-xl border-2 overflow-hidden ${isAfter ? 'border-green-500/40' : 'border-red-500/40'}`}>
@@ -338,25 +460,43 @@ function GeneratedFrame({ html, kind, url }) {
         </div>
         <button
           type="button"
-          onClick={() => setFitWidth((f) => !f)}
+          onClick={() => {
+            setFocused(false);
+            setFocusTransform('none');
+            setFitWidth((f) => !f);
+          }}
           title={fitWidth ? 'Switch to actual size (scroll around)' : 'Fit to width (zoom out)'}
           className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-gray-300 hover:text-white hover:bg-gray-700 transition-colors flex-shrink-0"
         >
-          {fitWidth ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
-          {fitWidth ? 'Actual size' : 'Fit width'}
+          {fitWidth && !focused ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+          {fitWidth && !focused ? 'Actual size' : 'Fit width'}
         </button>
       </div>
-      <div ref={wrapRef} className="overflow-auto bg-white" style={{ height: 460 }}>
-        <div style={{ width: DESIGN_W * scale, height: DESIGN_H * scale }}>
+      <div
+        ref={wrapRef}
+        className={`${focused ? 'overflow-hidden' : 'overflow-auto'} bg-white`}
+        style={{ height: 460 }}
+      >
+        <div
+          style={{
+            width: DESIGN_W * baseScale,
+            height: DESIGN_H * baseScale,
+            transform: focused ? focusTransform : 'none',
+            transformOrigin: '0 0',
+            transition: 'transform .45s cubic-bezier(.4,0,.2,1)',
+          }}
+        >
           <iframe
             title={`${kind} wireframe`}
+            ref={iframeRef}
+            onLoad={handleIframeLoad}
             srcDoc={safeHtml}
-            sandbox=""
+            sandbox={isAfter ? 'allow-same-origin' : ''}
             style={{
               width: DESIGN_W,
               height: DESIGN_H,
               border: 0,
-              transform: `scale(${scale})`,
+              transform: `scale(${baseScale})`,
               transformOrigin: 'top left',
             }}
           />
@@ -367,10 +507,40 @@ function GeneratedFrame({ html, kind, url }) {
         {hasChange && (
           <span className="inline-flex items-center gap-1.5 text-red-400">
             <span className="inline-block w-3 h-3 rounded-sm border-2 border-red-500" />
-            red outline + “NEW ▼” marks the change
+            red outline + “NEW ▲” arrow marks the change
           </span>
         )}
       </div>
+      {isAfter && changeCount > 0 && (
+        <div className="bg-gray-900 px-4 py-2.5 border-t border-gray-700 flex items-center justify-between gap-3">
+          <span className="text-xs text-gray-400">
+            {changeCount === 1 ? '1 change in this design' : `${changeCount} changes in this design`}
+            {changeCount > 1 && focused && (
+              <span className="text-gray-500"> · showing {((showIdxRef.current % changeCount) + 1)}/{changeCount}</span>
+            )}
+          </span>
+          <div className="flex items-center gap-2">
+            {focused && (
+              <button
+                type="button"
+                onClick={resetZoom}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-gray-200 text-xs font-medium transition-colors"
+              >
+                <Minimize2 className="w-3.5 h-3.5" />
+                Reset zoom
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={viewNextChange}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-500 text-white text-xs font-medium transition-colors"
+            >
+              <Locate className="w-3.5 h-3.5" />
+              {changeCount > 1 ? (focused ? 'Next change' : 'View changes') : 'View change'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

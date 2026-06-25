@@ -319,6 +319,14 @@ export async function getOrCreateBefore(db, { websiteId, url, imagePath }) {
 // Deterministic fallback: if the model did not tag the change with data-ff-new,
 // diff the AFTER against the BEFORE and tag the first opening tag on a line that is
 // new/changed in the AFTER. Guarantees the UI always has a change anchor to point at.
+// Structural / non-rendered tags are skipped: a marker on <html>/<head>/<meta>/etc.
+// is invisible, which is what made the "NEW" arrow seem to disappear after a heavy
+// refinement rewrite (where nearly every line differs and the first diff is the
+// doctype/head).
+const NON_VISIBLE_TAGS = new Set([
+  'html', 'head', 'body', 'meta', 'link', 'style', 'title', 'script', 'base', 'noscript',
+]);
+
 function ensureChangeMarker(before, after) {
   if (/data-ff-new/i.test(after)) return after;
   const beforeLines = new Set(String(before).split(/\r?\n/).map((l) => l.trim()));
@@ -326,9 +334,13 @@ function ensureChangeMarker(before, after) {
   for (let i = 0; i < afterLines.length; i += 1) {
     const trimmed = afterLines[i].trim();
     if (!trimmed || beforeLines.has(trimmed)) continue;
+    // Only anchor the marker on a visible element — never on a structural tag whose
+    // marker would render nothing (and so look like a missing arrow).
+    const open = trimmed.match(/<([a-zA-Z][\w-]*)/);
+    if (!open || NON_VISIBLE_TAGS.has(open[1].toLowerCase())) continue;
     // Tag the first opening tag on this changed line (skip closing tags / comments).
     const replaced = afterLines[i].replace(/<([a-zA-Z][\w-]*)((?:\s[^>]*?)?)(\/?)>/, (m, tag, attrs, selfClose) => {
-      if (/data-ff-new/i.test(m)) return m;
+      if (/data-ff-new/i.test(m) || NON_VISIBLE_TAGS.has(tag.toLowerCase())) return m;
       return `<${tag}${attrs} data-ff-new="true"${selfClose}>`;
     });
     if (replaced !== afterLines[i]) {
