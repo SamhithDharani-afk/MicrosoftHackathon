@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Play, Pause, ChevronLeft, ChevronRight, Sparkles, RefreshCw, AlertCircle, Timer,
 } from 'lucide-react';
-import { generateWalkthrough } from '../utils/api';
+import { generateSlideshowWalkthrough } from '../utils/api';
 
 // Step-by-step slideshow of a proposed change. The slides are PNGs the backend
 // captures with Playwright from the freshly generated "after" wireframe — a clean
@@ -68,7 +68,7 @@ export default function WalkthroughSlideshow({ websiteId, painPointSummary, fixT
     clearInterval(timerRef.current);
     timerRef.current = setInterval(() => setElapsedMs(performance.now() - start), 100);
     try {
-      const data = await generateWalkthrough({ websiteId, painPointSummary, fixTitle, fixDescription });
+      const data = await generateSlideshowWalkthrough({ websiteId, painPointSummary, fixTitle, fixDescription });
       setSlides(data.slides);
       setCurrent(0);
       if (storageKey) {

@@ -94,37 +94,6 @@ export async function generateAfter(payload) {
   return data; // { before, after }
 }
 
-<<<<<<< HEAD
-// Generate a slideshow walkthrough for the proposed change: the server applies the
-// fix, then Playwright-screenshots the new design into an ordered set of captioned
-// slides (a clean overview + a "find it"/"use it" pair per change).
-export async function generateWalkthrough(payload) {
-  const res = await fetch('/api/walkthrough', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !Array.isArray(data.slides) || data.slides.length === 0) {
-    throw new Error(data?.error || `Failed to generate walkthrough (${res.status})`);
-  }
-  return data; // { slides, after }
-}
-
-// Ask the backend (isolated Copilot CLI) to refine a developer-ready prompt for the
-// proposed change, tailored so it can be pasted into any external AI coding assistant.
-export async function generateDevPrompt(payload) {
-  const res = await fetch('/api/dev-prompt', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.prompt) {
-    throw new Error(data?.error || `Failed to generate prompt (${res.status})`);
-  }
-  return data; // { prompt }
-=======
 // Fetch a live screenshot of the page (base64 data URL), cached server-side.
 // Powers the Before panel's "Live page" toggle.
 export async function fetchScreenshot(websiteId, url) {
@@ -140,6 +109,7 @@ export async function fetchScreenshot(websiteId, url) {
 
 // Generate a paste-ready prompt an engineer can drop into Copilot / Claude /
 // Cursor to implement the fix. Pass `refinement` to regenerate with a correction.
+// Used by DevPromptButton (takes a full painPoint object).
 export async function generateDevPrompt(painPoint, websiteName, url, refinement) {
   const res = await fetch('/api/dev-prompt', {
     method: 'POST',
@@ -151,6 +121,22 @@ export async function generateDevPrompt(painPoint, websiteName, url, refinement)
     throw new Error(data?.error || `Failed to generate dev prompt (${res.status})`);
   }
   return data.prompt;
+}
+
+// Ask the backend (isolated Copilot CLI) to refine a developer-ready prompt for
+// the proposed wireframe/flow change. Used by AIPromptPanel (takes a flat context
+// object with kind, websiteName, url, painPointSummary, fixTitle, fixDescription).
+export async function generateWireframeDevPrompt(payload) {
+  const res = await fetch('/api/dev-prompt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.prompt) {
+    throw new Error(data?.error || `Failed to generate prompt (${res.status})`);
+  }
+  return data; // { prompt }
 }
 
 // Generate a before/after process-flow diagram for a pain point. The server
@@ -169,7 +155,7 @@ export async function generateProcessFlow(painPoint, websiteName, refinement) {
   return data.flow;
 }
 
-// Generate a step-by-step walkthrough of the proposed fix for a pain point.
+// Generate a step-by-step text walkthrough of the proposed fix for a pain point.
 // Pass `refinement` to regenerate with a correction note.
 export async function generateWalkthrough(painPoint, websiteName, refinement) {
   const res = await fetch('/api/walkthrough', {
@@ -182,5 +168,20 @@ export async function generateWalkthrough(painPoint, websiteName, refinement) {
     throw new Error(data?.error || `Failed to generate walkthrough (${res.status})`);
   }
   return data.walkthrough;
->>>>>>> origin/main
+}
+
+// Generate a Playwright-screenshot slideshow walkthrough for the proposed change:
+// the server applies the fix, captures the redesigned wireframe as slides, and
+// returns an ordered set of captioned PNG slides. Used by WalkthroughSlideshow.
+export async function generateSlideshowWalkthrough(payload) {
+  const res = await fetch('/api/walkthrough/slideshow', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !Array.isArray(data.slides) || data.slides.length === 0) {
+    throw new Error(data?.error || `Failed to generate walkthrough (${res.status})`);
+  }
+  return data; // { slides, after }
 }

@@ -1,12 +1,4 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-<<<<<<< HEAD
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, Sparkles, RefreshCw, Timer, Maximize2, Minimize2, Locate } from 'lucide-react';
-import { wireframes } from '../data/mockData';
-import { resolveWireframeContext } from '../utils/wireframeContext';
-import { fetchWireframe, generateAfter } from '../utils/api';
-import AIPromptPanel from '../components/AIPromptPanel';
-=======
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, Sparkles, RefreshCw, Timer, Maximize2, Minimize2, LayoutTemplate, Image as ImageIcon, Locate } from 'lucide-react';
 import { wireframes } from '../data/mockData';
@@ -15,7 +7,7 @@ import { fetchWireframe, generateAfter, fetchScreenshot, fetchPainPoints } from 
 import { useWebsites } from '../context/WebsitesContext';
 import RefineBox from '../components/RefineBox';
 import DevPromptButton from '../components/DevPromptButton';
->>>>>>> origin/main
+import AIPromptPanel from '../components/AIPromptPanel';
 
 function WireframePanel({ type, data, showCallouts = false }) {
   const isAfter = type === 'after';
@@ -304,12 +296,9 @@ const CHANGE_MARKER_STYLE =
   'font:800 15px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.1em;' +
   'animation:ffBob 1.4s ease-in-out infinite;' +
   'z-index:2147483647;pointer-events:none;white-space:nowrap;}' +
-<<<<<<< HEAD
   '@media(prefers-reduced-motion:reduce){' +
   '[data-ff-new]{animation:none !important;}' +
   '[data-ff-new]::after,[data-ff-new]::before{animation:none;}}' +
-=======
->>>>>>> origin/main
   '</style>';
 
 // Insert the marker CSS into a generated document (before </head>, else after <body>,
@@ -366,8 +355,6 @@ function GeneratedFrame({ html, kind, url }) {
     return isAfter ? injectChangeMarkers(linksSafe) : linksSafe;
   }, [html, isAfter]);
 
-<<<<<<< HEAD
-=======
   // When the document changes (e.g. the user refines the design), drop any active
   // zoom/focus so we never keep a stale transform pointing at an element that no
   // longer exists. The iframe reloads and handleIframeLoad recounts the changes.
@@ -378,7 +365,6 @@ function GeneratedFrame({ html, kind, url }) {
     showIdxRef.current = 0;
   }, [safeHtml]);
 
->>>>>>> origin/main
   // Read the change-marked elements out of the (same-origin) iframe document.
   const readChanges = useCallback(() => {
     try {

@@ -1,20 +1,11 @@
-<<<<<<< HEAD
-import { useParams, Link } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import { ArrowLeft, Play, MessageSquare, AlertCircle } from 'lucide-react';
-import { fetchPainPoints, fetchFeedback } from '../utils/api';
-import { severityMeta } from '../utils/severity';
-import WalkthroughSlideshow from '../components/WalkthroughSlideshow';
-=======
 import { useParams, useLocation, Link } from 'react-router-dom';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { ArrowLeft, Play, ChevronRight, MessageSquare, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
-import { walkthroughs } from '../data/mockData';
 import { fetchPainPoints, fetchFeedback, generateWalkthrough } from '../utils/api';
 import { severityMeta } from '../utils/severity';
 import RefineBox from '../components/RefineBox';
 import DevPromptButton from '../components/DevPromptButton';
->>>>>>> origin/main
+import WalkthroughSlideshow from '../components/WalkthroughSlideshow';
 
 export default function PainPointDetail() {
   const { id } = useParams();
@@ -165,8 +156,8 @@ export default function PainPointDetail() {
         </section>
       )}
 
-      {/* AI-generated walkthrough — for pain points without a curated one. */}
-      {!walkthrough && (
+      {/* AI-generated walkthrough — for pain points without a websiteId (no slideshow). */}
+      {!painPoint.websiteId && (
         <section className="mb-10">
           <div className="flex items-center justify-between mb-4 gap-4">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">

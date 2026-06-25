@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { Sparkles, Copy, Check, RefreshCw, ExternalLink, Wand2 } from 'lucide-react';
 import { buildDevPrompt } from '../utils/devPrompt';
-import { generateDevPrompt } from '../utils/api';
+import { generateWireframeDevPrompt } from '../utils/api';
 
 // An embedded "Ask AI to build this" panel. It turns the proposed change into a
 // detailed, copy-paste-ready prompt the user can drop into any external AI coding
@@ -30,7 +30,7 @@ export default function AIPromptPanel({ context }) {
     setRefining(true);
     setError('');
     try {
-      const { prompt: refined } = await generateDevPrompt({
+      const { prompt: refined } = await generateWireframeDevPrompt({
         kind: context.kind,
         websiteName: context.websiteName,
         url: context.url,

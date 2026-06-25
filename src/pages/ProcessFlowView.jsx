@@ -11,16 +11,12 @@ import {
 import 'reactflow/dist/style.css';
 import { ArrowLeft, RefreshCw, AlertTriangle } from 'lucide-react';
 import { processFlows } from '../data/mockData';
-<<<<<<< HEAD
 import { resolveWireframeContext } from '../utils/wireframeContext';
-import FlowNode from '../components/FlowNode';
-import AIPromptPanel from '../components/AIPromptPanel';
-=======
 import { buildProcessFlow } from '../data/flowLayout';
 import { fetchPainPoints, generateProcessFlow } from '../utils/api';
 import FlowNode from '../components/FlowNode';
 import RefineBox from '../components/RefineBox';
->>>>>>> origin/main
+import AIPromptPanel from '../components/AIPromptPanel';
 
 const nodeTypes = { custom: FlowNode };
 
@@ -118,22 +114,18 @@ export default function ProcessFlowView() {
     );
   }
 
-<<<<<<< HEAD
-  const [nodes, , onNodesChange] = useNodesState(flow.nodes);
-  const [edges, , onEdgesChange] = useEdgesState(flow.edges);
-  const ctx = resolveWireframeContext(id);
-=======
   if (error || !flow) {
     return (
       <div className="max-w-4xl mx-auto px-6 py-20 text-center">
         <AlertTriangle className="w-7 h-7 text-amber-400 mx-auto mb-3" />
-        <h2 className="text-xl text-white mb-1">Couldn’t build the process flow</h2>
+        <h2 className="text-xl text-white mb-1">Couldn't build the process flow</h2>
         <p className="text-sm text-gray-500 mb-4">{error || 'Process flow not found'}</p>
         <Link to="/dashboard" className="text-indigo-400 hover:underline inline-block">← Back to Dashboard</Link>
       </div>
     );
   }
->>>>>>> origin/main
+
+  const ctx = resolveWireframeContext(id);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10 animate-fade-in">
@@ -205,21 +197,6 @@ export default function ProcessFlowView() {
             </div>
           </div>
         </div>
-<<<<<<< HEAD
-      </div>
-
-      {/* Embedded AI prompt helper — turn this flow change into a copy-paste dev prompt */}
-      <AIPromptPanel
-        context={{
-          kind: 'process-flow',
-          websiteName: ctx?.websiteName || '',
-          url: ctx?.url || '',
-          painPointSummary: ctx?.painPointSummary || '',
-          title: ctx?.title || flow.title,
-          description: ctx?.description || flow.description,
-        }}
-      />
-=======
       ) : (
         <div className="mt-6 bg-gray-900 border border-gray-800 rounded-xl p-6">
           <h3 className="text-lg font-semibold text-white mb-3">Key Improvements</h3>
@@ -248,7 +225,18 @@ export default function ProcessFlowView() {
             placeholder='Describe what to change, e.g. "the old path should have 4 steps and mention the search bar"'
         />
       )}
->>>>>>> origin/main
+
+      {/* Embedded AI prompt helper — turn this flow change into a copy-paste dev prompt */}
+      <AIPromptPanel
+        context={{
+          kind: 'process-flow',
+          websiteName: ctx?.websiteName || '',
+          url: ctx?.url || '',
+          painPointSummary: ctx?.painPointSummary || '',
+          title: ctx?.title || flow.title,
+          description: ctx?.description || flow.description,
+        }}
+      />
     </div>
   );
 }
