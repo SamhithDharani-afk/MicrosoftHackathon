@@ -317,15 +317,79 @@ export async function getOrCreateBefore(db, { websiteId, url, imagePath }) {
 }
 
 // Deterministic fallback: if the model did not tag the change with data-ff-new,
-// diff the AFTER against the BEFORE and tag the first opening tag on a line that is
-// new/changed in the AFTER. Guarantees the UI always has a change anchor to point at.
+// diff the AFTER against the BEFORE and tag the element that changed so the UI always
+// has a "NEW" arrow anchor. Pass 1 tags the first changed VISIBLE element line (new or
+// modified markup, incl. inline style/size changes on the element's own tag). Pass 2
+// covers CSS-only changes (e.g. resizing a logo via a <style> rule, where no element
+// line differs) by finding the selector whose declarations changed and tagging the
+// first element it matches.
 // Structural / non-rendered tags are skipped: a marker on <html>/<head>/<meta>/etc.
-// is invisible, which is what made the "NEW" arrow seem to disappear after a heavy
-// refinement rewrite (where nearly every line differs and the first diff is the
-// doctype/head).
+// is invisible, which is what made the "NEW" arrow seem to disappear.
 const NON_VISIBLE_TAGS = new Set([
   'html', 'head', 'body', 'meta', 'link', 'style', 'title', 'script', 'base', 'noscript',
 ]);
+
+function escapeRe(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Build a regex that matches the opening tag of the first element a CSS selector
+// targets, preferring id, then class, then a (visible) tag name. Returns null when
+// the selector has no usable simple part.
+function selectorMatcher(selector) {
+  const last = selector.split(',')[0].trim().split(/[\s>+~]+/).filter(Boolean).pop() || '';
+  const id = last.match(/#([\w-]+)/);
+  if (id) {
+    return new RegExp(`<[a-zA-Z][\\w-]*[^>]*\\bid\\s*=\\s*["']${escapeRe(id[1])}["'][^>]*>`, 'i');
+  }
+  const cls = last.match(/\.([\w-]+)/);
+  if (cls) {
+    return new RegExp(
+      `<[a-zA-Z][\\w-]*[^>]*\\bclass\\s*=\\s*["'][^"']*\\b${escapeRe(cls[1])}\\b[^"']*["'][^>]*>`,
+      'i'
+    );
+  }
+  const tag = last.match(/^([a-zA-Z][\w-]*)$/);
+  if (tag && !NON_VISIBLE_TAGS.has(tag[1].toLowerCase())) {
+    return new RegExp(`<${escapeRe(tag[1])}(\\s[^>]*)?>`, 'i');
+  }
+  return null;
+}
+
+// Pass 2: tag the element whose CSS changed. Best-effort; returns the tagged HTML or
+// null when no confident match is found.
+function tagByChangedCss(before, after) {
+  const beforeLines = new Set(String(before).split(/\r?\n/).map((l) => l.trim()));
+  const lines = String(after).split(/\r?\n/);
+  let inStyle = false;
+  let currentSelector = '';
+  const selectors = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (/<style[\s>]/i.test(line)) inStyle = true;
+    if (inStyle) {
+      const sel = line.replace(/^<style[^>]*>/i, '').match(/^([^{}]+)\{/);
+      if (sel) currentSelector = sel[1].trim();
+      if (line && !beforeLines.has(line) && currentSelector) selectors.push(currentSelector);
+    }
+    if (/<\/style>/i.test(line)) {
+      inStyle = false;
+      currentSelector = '';
+    }
+  }
+  for (const selector of selectors) {
+    const matcher = selectorMatcher(selector);
+    if (!matcher) continue;
+    let done = false;
+    const out = String(after).replace(matcher, (m) => {
+      if (done || /data-ff-new/i.test(m)) return m;
+      done = true;
+      return m.replace(/^<([a-zA-Z][\w-]*)/, '<$1 data-ff-new="true"');
+    });
+    if (done) return out;
+  }
+  return null;
+}
 
 function ensureChangeMarker(before, after) {
   if (/data-ff-new/i.test(after)) return after;
@@ -334,20 +398,35 @@ function ensureChangeMarker(before, after) {
   for (let i = 0; i < afterLines.length; i += 1) {
     const trimmed = afterLines[i].trim();
     if (!trimmed || beforeLines.has(trimmed)) continue;
-    // Only anchor the marker on a visible element — never on a structural tag whose
-    // marker would render nothing (and so look like a missing arrow).
-    const open = trimmed.match(/<([a-zA-Z][\w-]*)/);
-    if (!open || NON_VISIBLE_TAGS.has(open[1].toLowerCase())) continue;
-    // Tag the first opening tag on this changed line (skip closing tags / comments).
-    const replaced = afterLines[i].replace(/<([a-zA-Z][\w-]*)((?:\s[^>]*?)?)(\/?)>/, (m, tag, attrs, selfClose) => {
-      if (/data-ff-new/i.test(m) || NON_VISIBLE_TAGS.has(tag.toLowerCase())) return m;
-      return `<${tag}${attrs} data-ff-new="true"${selfClose}>`;
-    });
-    if (replaced !== afterLines[i]) {
-      afterLines[i] = replaced;
+    const line = afterLines[i];
+    // Tag the first VISIBLE opening tag on this changed line. We scan past any
+    // structural tags (html/head/body/…) that may share the line so the marker
+    // never lands on something that renders nothing (which looks like a missing arrow).
+    const tagRe = /<([a-zA-Z][\w-]*)((?:\s[^>]*?)?)(\/?)>/g;
+    let m;
+    let newLine = null;
+    while ((m = tagRe.exec(line)) !== null) {
+      const [full, tag, attrs, selfClose] = m;
+      if (NON_VISIBLE_TAGS.has(tag.toLowerCase())) continue;
+      if (/data-ff-new/i.test(full)) {
+        newLine = line; // already tagged on this line — nothing to do
+        break;
+      }
+      newLine =
+        line.slice(0, m.index) +
+        `<${tag}${attrs} data-ff-new="true"${selfClose}>` +
+        line.slice(m.index + full.length);
+      break;
+    }
+    if (newLine && newLine !== line) {
+      afterLines[i] = newLine;
       return afterLines.join('\n');
     }
   }
+  // No element line changed — the fix was likely CSS-only (e.g. a resize). Try to
+  // anchor the marker via the changed CSS selector.
+  const cssTagged = tagByChangedCss(before, after);
+  if (cssTagged) return cssTagged;
   return after;
 }
 

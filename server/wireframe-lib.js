@@ -49,7 +49,8 @@ export function buildAfterPrompt({ beforeHtml, painPointSummary, fixTitle, fixDe
       `'${String(refinement).trim()}'.\n` +
       `While applying this correction you MUST still keep exactly ONE element tagged ` +
       `with data-ff-new="true" (on the changed/added element), and you must still NOT ` +
-      `remove, replace or relocate any element that already existed on the page.\n\n`
+      `delete or throw away any OTHER existing element or feature that is unrelated to ` +
+      `the change.\n\n`
     : '';
   return (
     `Here is the complete HTML of a web page:\n"""\n${String(beforeHtml || '')}\n"""\n\n` +
@@ -57,20 +58,25 @@ export function buildAfterPrompt({ beforeHtml, painPointSummary, fixTitle, fixDe
     `Apply ONLY this change to the page: '${fixTitle} — ${fixDescription}'.\n\n` +
     refineBlock +
     `CRITICAL — TAG THE CHANGE (do this every time):\n` +
-    `On the single HTML element you add or modify to implement the fix, add the ` +
+    `On the single visible element you add or change to implement the fix, add the ` +
     `attribute data-ff-new="true". Add it to exactly ONE element and to no other ` +
     `element. Example: <button data-ff-new="true" class="...">Settings</button>. ` +
+    `This applies to EVERY kind of change — adding, resizing, moving, recoloring or ` +
+    `restyling an element. Even when you implement the change purely in CSS (e.g. a ` +
+    `<style> rule that resizes a logo), you MUST still put data-ff-new on the actual ` +
+    `element whose appearance changes (the logo element itself), never on a <style> ` +
+    `rule or a wrapper. ` +
     `This attribute renders nothing visible by itself — it is a hook used later to ` +
     `highlight the change — so it does NOT count as a visible label. Omitting it is a ` +
     `failure.\n\n` +
     `RULES (follow exactly):\n` +
-    `- PURELY ADDITIVE: implement the fix by ADDING new element(s). Do NOT remove, ` +
-    `replace, relocate, rename, hide, restyle or otherwise alter any element, control, ` +
-    `button, nav item, link, icon or feature that already exists on the page. Every ` +
-    `existing affordance must stay exactly where and how it was — the fix must not ` +
-    `interfere with anything already on the page.\n` +
-    `- Keep everything else byte-for-byte identical so the fix is the only visible ` +
-    `difference. Same layout, palette, text, fonts and proportions otherwise.\n` +
+    `- PRESERVE EVERYTHING ELSE: the fix may add, resize, move, restyle or replace ` +
+    `the specific element(s) the fix itself targets — do whatever the change requires ` +
+    `to that element. But you MUST keep every OTHER element, control, button, nav item, ` +
+    `link, icon, section and feature that already exists on the page present and working. ` +
+    `Never delete, drop, omit or throw away anything that is unrelated to the fix.\n` +
+    `- Keep everything not touched by the fix byte-for-byte identical so the fix is the ` +
+    `only visible difference. Same layout, palette, text, fonts and proportions otherwise.\n` +
     `- Stay self-contained: inline <style> only, no external/network requests, no ` +
     `<img>, no SVG, no scripts, no libraries.\n` +
     `- ZERO VISIBLE commentary or meta-text. Do NOT draw any captions, legends, ` +
