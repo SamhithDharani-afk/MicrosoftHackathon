@@ -358,11 +358,20 @@ function GeneratedFrame({ html, kind, url }) {
     }
   }, []);
 
-  // Once the frame loads, count the changes so we can offer a "View changes" jump.
+  // Once the frame loads: prune over-tagging (drop the marker from any element that
+  // wraps another marked element, keeping only the leaf controls), then count the
+  // remaining changes so we can offer a "View changes" zoom.
   const handleIframeLoad = useCallback(() => {
     if (!isAfter) {
       setChangeCount(0);
       return;
+    }
+    try {
+      readChanges().forEach((el) => {
+        if (el.querySelector('[data-ff-new]')) el.removeAttribute('data-ff-new');
+      });
+    } catch {
+      /* same-origin read may fail; not critical */
     }
     changeIdxRef.current = 0;
     setChangeCount(readChanges().length);
