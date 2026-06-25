@@ -4,6 +4,7 @@ import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Downlo
 import { wireframes } from '../data/mockData';
 import { resolveWireframeContext } from '../utils/wireframeContext';
 import { fetchWireframe, generateAfter } from '../utils/api';
+import AIPromptPanel from '../components/AIPromptPanel';
 
 function WireframePanel({ type, data, showCallouts = false }) {
   const isAfter = type === 'after';
@@ -849,6 +850,18 @@ export default function WireframeView() {
           </div>
         </div>
       )}
+
+      {/* Embedded AI prompt helper — turn this change into a copy-paste dev prompt */}
+      <AIPromptPanel
+        context={{
+          kind: 'wireframe',
+          websiteName: ctx.websiteName,
+          url: ctx.url,
+          painPointSummary: ctx.painPointSummary,
+          title: ctx.title,
+          description: ctx.description,
+        }}
+      />
     </div>
   );
 }

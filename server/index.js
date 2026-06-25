@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { feedbackEntries as seedFeedback, painPoints as curatedPainPoints, websites } from '../src/data/mockData.js';
 import { clusterFeedback } from '../src/data/clustering.js';
-import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, localScreenshotPath } from './wireframe-service.js';
+import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, generateDevPrompt, localScreenshotPath } from './wireframe-service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -173,6 +173,26 @@ app.post('/api/wireframe/after', async (req, res) => {
       fixDescription: b.fixDescription || '',
     });
     res.json({ before, after });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
+app.post('/api/dev-prompt', async (req, res) => {
+  const b = req.body || {};
+  if (!b.fixTitle && !b.fixDescription) {
+    return res.status(400).json({ error: 'fixTitle or fixDescription is required' });
+  }
+  try {
+    const prompt = await generateDevPrompt({
+      kind: b.kind || 'wireframe',
+      websiteName: b.websiteName || '',
+      url: b.url || '',
+      painPointSummary: b.painPointSummary || '',
+      fixTitle: b.fixTitle || '',
+      fixDescription: b.fixDescription || '',
+    });
+    res.json({ prompt });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }

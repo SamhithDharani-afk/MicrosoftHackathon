@@ -63,3 +63,18 @@ export async function generateAfter(payload) {
   }
   return data; // { before, after }
 }
+
+// Ask the backend (isolated Copilot CLI) to refine a developer-ready prompt for the
+// proposed change, tailored so it can be pasted into any external AI coding assistant.
+export async function generateDevPrompt(payload) {
+  const res = await fetch('/api/dev-prompt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.prompt) {
+    throw new Error(data?.error || `Failed to generate prompt (${res.status})`);
+  }
+  return data; // { prompt }
+}

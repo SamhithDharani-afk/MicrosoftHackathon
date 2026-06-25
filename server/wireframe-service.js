@@ -24,6 +24,7 @@ import { chromium } from 'playwright';
 import {
   buildBeforePrompt,
   buildAfterPrompt,
+  buildDevPromptRequest,
   extractAnswer,
   cleanHtml,
   shouldCopyHomeEntry,
@@ -290,6 +291,17 @@ export async function applyFix(db, { websiteId, url, imagePath, painPointSummary
   const after = cleanHtml(extractAnswer(stdout));
   if (!after) throw new Error('Model returned no HTML for the proposed change.');
   return { before, after: ensureChangeMarker(before, after) };
+}
+
+// Ask the isolated Copilot CLI to write a developer-ready prompt (for an external AI
+// coding assistant) that implements the proposed change. Returns the prompt text.
+export async function generateDevPrompt(context) {
+  const stdout = await runCopilot(buildDevPromptRequest(context));
+  let text = String(extractAnswer(stdout) || '').trim();
+  // Strip a wrapping markdown code fence if the model added one anyway.
+  text = text.replace(/^```[a-zA-Z]*\s*\n?/, '').replace(/\n?```\s*$/, '').trim();
+  if (!text) throw new Error('Model returned no prompt text.');
+  return text;
 }
 
 export { EPHEMERAL_HOME, MODEL };

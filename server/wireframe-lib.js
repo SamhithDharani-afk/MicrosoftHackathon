@@ -71,6 +71,32 @@ export function buildAfterPrompt({ beforeHtml, painPointSummary, fixTitle, fixDe
   );
 }
 
+// Prompt that asks the model to write a developer-ready prompt for an EXTERNAL AI
+// coding assistant. The output is the prompt text itself (ready to copy/paste),
+// tailored to the specific change.
+export function buildDevPromptRequest({ kind, websiteName, url, painPointSummary, fixTitle, fixDescription }) {
+  const kindLabel = kind === 'process-flow' ? 'user-flow / process redesign' : 'UI wireframe change';
+  return (
+    `Write a single, detailed, copy-paste-ready prompt that a developer will paste ` +
+    `into an external AI coding assistant (such as GitHub Copilot or ChatGPT) to ` +
+    `implement the following ${kindLabel} in their own front-end codebase.\n\n` +
+    `Product / page: ${websiteName || 'a web application'}${url ? ` (${url})` : ''}\n` +
+    `User pain point: ${painPointSummary || 'N/A'}\n` +
+    `Proposed change: ${fixTitle || 'N/A'}\n` +
+    `Details: ${fixDescription || 'N/A'}\n\n` +
+    `The prompt you write MUST:\n` +
+    `- Be addressed to the coding assistant (second person), not to me.\n` +
+    `- Open with concise context, then explicit requirements (keep the existing ` +
+    `design language; accessibility — keyboard, ARIA labels, contrast, focus; no ` +
+    `regressions; follow repo conventions and reuse existing components).\n` +
+    `- State the deliverables: concrete code changes with file paths, a short ` +
+    `explanation of where the change goes, and any new props/routes/state.\n` +
+    `- Be specific to THIS change, well-structured, and usable verbatim.\n\n` +
+    `Output ONLY the prompt text. No preamble, no surrounding quotes, no markdown ` +
+    `code fences, and nothing addressed to me.`
+  );
+}
+
 // JSON object per line; the answer is the last assistant message's text content,
 // which may live under several shapes depending on event type.
 export function extractAnswer(stdout) {

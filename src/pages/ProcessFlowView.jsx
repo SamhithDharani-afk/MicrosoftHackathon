@@ -11,7 +11,9 @@ import {
 import 'reactflow/dist/style.css';
 import { ArrowLeft } from 'lucide-react';
 import { processFlows } from '../data/mockData';
+import { resolveWireframeContext } from '../utils/wireframeContext';
 import FlowNode from '../components/FlowNode';
+import AIPromptPanel from '../components/AIPromptPanel';
 
 const nodeTypes = { custom: FlowNode };
 
@@ -30,6 +32,7 @@ export default function ProcessFlowView() {
 
   const [nodes, , onNodesChange] = useNodesState(flow.nodes);
   const [edges, , onEdgesChange] = useEdgesState(flow.edges);
+  const ctx = resolveWireframeContext(id);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-10 animate-fade-in">
@@ -100,6 +103,18 @@ export default function ProcessFlowView() {
           </div>
         </div>
       </div>
+
+      {/* Embedded AI prompt helper — turn this flow change into a copy-paste dev prompt */}
+      <AIPromptPanel
+        context={{
+          kind: 'process-flow',
+          websiteName: ctx?.websiteName || '',
+          url: ctx?.url || '',
+          painPointSummary: ctx?.painPointSummary || '',
+          title: ctx?.title || flow.title,
+          description: ctx?.description || flow.description,
+        }}
+      />
     </div>
   );
 }
