@@ -18,3 +18,12 @@ export function severityMeta(rating) {
       return { label: 'Mild', text: 'text-green-400', bg: 'bg-green-500/10', badge: 'bg-green-500/20 text-green-400', solid: 'bg-green-600' };
   }
 }
+
+// Average feedback severity (mean rating, 1–5) across a set of feedback items, or
+// null when none are rated. A pain point's badge scales off this — the average of
+// its own submissions' severities — rather than a volume-weighted impact score.
+export function averageSeverity(items) {
+  const rated = (items || []).filter((f) => f && Number.isFinite(+f.rating));
+  if (!rated.length) return null;
+  return rated.reduce((sum, f) => sum + (+f.rating), 0) / rated.length;
+}

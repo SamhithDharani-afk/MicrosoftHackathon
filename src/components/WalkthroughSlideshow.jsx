@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Play, Pause, ChevronLeft, ChevronRight, Sparkles, RefreshCw, AlertCircle, Timer,
 } from 'lucide-react';
-import { generateSlideshowWalkthrough } from '../utils/api';
+import { generateSlideshowWalkthrough, fetchCachedSlideshow } from '../utils/api';
 
 // Step-by-step slideshow of a proposed change. The slides are PNGs the backend
 // captures with Playwright from the freshly generated "after" wireframe — a clean
@@ -21,9 +21,13 @@ export default function WalkthroughSlideshow({ websiteId, painPointSummary, fixT
   const timerRef = useRef(null);
   const autoplayRef = useRef(null);
 
-  // Restore a previously generated slideshow for this pain point.
+  // Restore a previously generated slideshow for this pain point: prefer the local
+  // cache (instant), then fall back to a server-side slideshow warmed by `npm run
+  // pregen` so the walkthrough shows up immediately without re-generating.
   useEffect(() => {
-    if (!storageKey) return;
+    if (!storageKey) return undefined;
+    let cancelled = false;
+    let restored = false;
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
@@ -31,12 +35,28 @@ export default function WalkthroughSlideshow({ websiteId, painPointSummary, fixT
         if (Array.isArray(parsed) && parsed.length) {
           setSlides(parsed);
           setCurrent(0);
+          restored = true;
         }
       }
     } catch {
       // ignore corrupt / unavailable cache
     }
-  }, [storageKey]);
+    if (!restored) {
+      fetchCachedSlideshow(cacheKey)
+        .then((data) => {
+          if (cancelled || !data || !Array.isArray(data.slides) || !data.slides.length) return;
+          setSlides(data.slides);
+          setCurrent(0);
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(data.slides));
+          } catch {
+            // best-effort: slideshow PNGs can exceed the localStorage quota
+          }
+        })
+        .catch(() => {});
+    }
+    return () => { cancelled = true; };
+  }, [storageKey, cacheKey]);
 
   useEffect(() => () => {
     clearInterval(timerRef.current);
@@ -58,7 +78,7 @@ export default function WalkthroughSlideshow({ websiteId, painPointSummary, fixT
     return () => clearInterval(autoplayRef.current);
   }, [playing, slides.length, go]);
 
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = useCallback(async (refresh = false) => {
     if (!websiteId || !fixTitle) return;
     setLoading(true);
     setError('');
@@ -68,7 +88,7 @@ export default function WalkthroughSlideshow({ websiteId, painPointSummary, fixT
     clearInterval(timerRef.current);
     timerRef.current = setInterval(() => setElapsedMs(performance.now() - start), 100);
     try {
-      const data = await generateSlideshowWalkthrough({ websiteId, painPointSummary, fixTitle, fixDescription });
+      const data = await generateSlideshowWalkthrough({ websiteId, painPointSummary, fixTitle, fixDescription, cacheKey, refresh });
       setSlides(data.slides);
       setCurrent(0);
       if (storageKey) {
@@ -86,7 +106,7 @@ export default function WalkthroughSlideshow({ websiteId, painPointSummary, fixT
       setElapsedMs(performance.now() - start);
       setLoading(false);
     }
-  }, [websiteId, painPointSummary, fixTitle, fixDescription, storageKey]);
+  }, [websiteId, painPointSummary, fixTitle, fixDescription, storageKey, cacheKey]);
 
   const elapsedSec = (elapsedMs / 1000).toFixed(1);
   const hasSlides = slides.length > 0;
@@ -113,7 +133,7 @@ export default function WalkthroughSlideshow({ websiteId, painPointSummary, fixT
         )}
         <button
           type="button"
-          onClick={handleGenerate}
+          onClick={() => handleGenerate(false)}
           disabled={loading}
           className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold transition-colors"
         >
@@ -198,7 +218,7 @@ export default function WalkthroughSlideshow({ websiteId, painPointSummary, fixT
 
         <button
           type="button"
-          onClick={handleGenerate}
+          onClick={() => handleGenerate(true)}
           disabled={loading}
           title="Regenerate the walkthrough"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gray-800 hover:bg-gray-700 disabled:opacity-60 text-gray-200 text-xs font-medium transition-colors"

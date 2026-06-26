@@ -47,6 +47,22 @@ export async function submitFeedback(payload) {
   return res.json();
 }
 
+// Delete a single feedback entry by id.
+export async function deleteFeedback(id) {
+  const res = await fetch(`/api/feedback/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  if (!res.ok) {
+    let message = `Failed to delete feedback (${res.status})`;
+    try {
+      const body = await res.json();
+      if (body?.error) message = body.error;
+    } catch {
+      // ignore JSON parse errors
+    }
+    throw new Error(message);
+  }
+  return res.json();
+}
+
 // Real-time feedback assistant: ask the backend (which calls a low-latency model)
 // to score the draft and return nudges + quick-insert suggestions. Pass an
 // AbortSignal so the caller can cancel in-flight requests while the user types.
@@ -199,5 +215,16 @@ export async function generateSlideshowWalkthrough(payload) {
   if (!res.ok || !Array.isArray(data.slides) || data.slides.length === 0) {
     throw new Error(data?.error || `Failed to generate walkthrough (${res.status})`);
   }
+  return data; // { slides, after }
+}
+
+// Fetch a pre-generated slideshow (warmed by `npm run pregen`) for a cache key.
+// Returns { slides, after } on a cache hit, or null when nothing is cached.
+export async function fetchCachedSlideshow(cacheKey) {
+  if (!cacheKey) return null;
+  const res = await fetch(`/api/walkthrough/slideshow?cacheKey=${encodeURIComponent(cacheKey)}`);
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!Array.isArray(data.slides) || data.slides.length === 0) return null;
   return data; // { slides, after }
 }

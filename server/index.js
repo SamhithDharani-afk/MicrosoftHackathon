@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { feedbackEntries as seedFeedback, painPoints as curatedPainPoints, websites } from '../src/data/mockData.js';
-import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath, generateWalkthrough as generateSlideshowWalkthrough, generateDevPrompt as generateWireframeDevPrompt, generateWalkthroughVideo } from './wireframe-service.js';
+import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath, generateWalkthroughCached as generateSlideshowWalkthroughCached, getCachedSlides, ensureWalkthroughTable, generateDevPrompt as generateWireframeDevPrompt, generateWalkthroughVideo } from './wireframe-service.js';
 import { assistFeedback } from './assist-service.js';
 import { hasToken } from './github-models.js';
 import {
@@ -41,6 +41,9 @@ db.exec(`
 
 // Wireframe cache table (before_html per website, generated from a screenshot).
 ensureWireframeTable(db);
+
+// Slideshow walkthrough cache (pre-generated captioned slides per pain-point fix).
+ensureWalkthroughTable(db);
 
 // AI pain-point cluster cache (semantic coalescing of feedback per website).
 ensureCoalesceTable(db);
@@ -122,6 +125,15 @@ app.post('/api/feedback', (req, res) => {
     createdAt
   );
   res.status(201).json(toClient(db.prepare('SELECT * FROM feedback WHERE id = ?').get(id)));
+});
+
+// Delete a feedback entry by id.
+app.delete('/api/feedback/:id', (req, res) => {
+  const { id } = req.params;
+  const existing = db.prepare('SELECT id FROM feedback WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'Feedback not found' });
+  db.prepare('DELETE FROM feedback WHERE id = ?').run(id);
+  res.json({ ok: true, id });
 });
 
 // Pain points — clustered live from the database, not hardcoded.
@@ -298,7 +310,9 @@ app.post('/api/walkthrough/slideshow', async (req, res) => {
   }
   const liveUrl = resolveUrl(b.websiteId, b.url);
   try {
-    const { slides, after } = await generateSlideshowWalkthrough(db, {
+    const { slides, after } = await generateSlideshowWalkthroughCached(db, {
+      cacheKey: b.cacheKey ? String(b.cacheKey) : '',
+      refresh: !!b.refresh,
       websiteId: String(b.websiteId),
       url: liveUrl,
       imagePath: resolveImage(b.websiteId),
@@ -311,6 +325,17 @@ app.post('/api/walkthrough/slideshow', async (req, res) => {
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
+});
+
+// Return a pre-generated slideshow (from `npm run pregen`) for a cache key, or 404
+// when none is cached — lets the client show a warmed walkthrough instantly without
+// triggering generation.
+app.get('/api/walkthrough/slideshow', (req, res) => {
+  const cacheKey = req.query.cacheKey ? String(req.query.cacheKey) : '';
+  if (!cacheKey) return res.status(400).json({ error: 'cacheKey is required' });
+  const cached = getCachedSlides(db, cacheKey);
+  if (!cached) return res.status(404).json({ error: 'No pre-generated slideshow for this cache key' });
+  res.json(cached);
 });
 
 // Generate a simulated-usage GIF: apply the fix, then render a fake cursor finding

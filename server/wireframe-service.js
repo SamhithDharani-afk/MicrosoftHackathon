@@ -245,6 +245,59 @@ export function getCachedBefore(db, websiteId) {
   return row && row.before_html ? { before: row.before_html, url: row.url || '' } : null;
 }
 
+// Slideshow walkthroughs are expensive (apply the fix + Playwright-screenshot a
+// set of slides + narrate), so they're cached per (cache_key) — the same stable
+// key the client uses (painPointId_fixKey). This lets `npm run pregen` warm them
+// ahead of the demo and serve them instantly.
+export function ensureWalkthroughTable(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS walkthroughs (
+      cache_key    TEXT PRIMARY KEY,
+      website_id   TEXT,
+      json         TEXT NOT NULL,
+      created_at   TEXT NOT NULL
+    );
+  `);
+}
+
+export function getCachedSlides(db, cacheKey) {
+  if (!cacheKey) return null;
+  const row = db.prepare('SELECT json FROM walkthroughs WHERE cache_key = ?').get(cacheKey);
+  if (!row || !row.json) return null;
+  try {
+    const parsed = JSON.parse(row.json);
+    return Array.isArray(parsed.slides) && parsed.slides.length ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function putCachedSlides(db, cacheKey, websiteId, value) {
+  if (!cacheKey) return;
+  db.prepare(`
+    INSERT INTO walkthroughs (cache_key, website_id, json, created_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(cache_key) DO UPDATE SET
+      website_id = excluded.website_id,
+      json = excluded.json,
+      created_at = excluded.created_at
+  `).run(cacheKey, websiteId || '', JSON.stringify(value), new Date().toISOString());
+}
+
+// Cached wrapper around generateWalkthrough: return the stored slideshow for this
+// cacheKey when present (unless `refresh`), otherwise generate it and cache it.
+export async function generateWalkthroughCached(db, opts) {
+  const { cacheKey, refresh } = opts;
+  if (cacheKey && !refresh) {
+    const cached = getCachedSlides(db, cacheKey);
+    if (cached) return cached;
+  }
+  const result = await generateWalkthrough(db, opts);
+  putCachedSlides(db, cacheKey, opts.websiteId, result);
+  return result;
+}
+
+
 export function getCachedScreenshot(db, websiteId) {
   const row = db
     .prepare('SELECT data_url, url FROM wireframe_screenshots WHERE website_id = ?')

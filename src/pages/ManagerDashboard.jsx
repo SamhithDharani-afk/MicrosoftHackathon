@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AlertTriangle, TrendingUp, MessageSquare, ChevronDown, ChevronRight, Image, Workflow, Eye, Sparkles, Globe, GitBranch, Plus } from 'lucide-react';
+import { AlertTriangle, TrendingUp, MessageSquare, ChevronDown, ChevronRight, Image, Workflow, Eye, Sparkles, Globe, GitBranch, Plus, X, Trash2 } from 'lucide-react';
 import { useWebsites } from '../context/WebsitesContext';
-import { fetchFeedback, fetchPainPoints } from '../utils/api';
-import { severityMeta } from '../utils/severity';
+import { fetchFeedback, fetchPainPoints, deleteFeedback } from '../utils/api';
+import { severityMeta, averageSeverity } from '../utils/severity';
 
 function PainPointCard({ pp, avgSeverity, onGenerate }) {
   const [expanded, setExpanded] = useState(false);
@@ -17,8 +17,10 @@ function PainPointCard({ pp, avgSeverity, onGenerate }) {
       >
         <div className="flex items-center gap-4 min-w-0">
           <span className={`text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide flex-shrink-0
-            ${pp.severity === 'critical' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
-            {pp.severity}
+            ${avgSeverity != null
+              ? severityMeta(avgSeverity).badge
+              : (pp.severity === 'critical' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400')}`}>
+            {avgSeverity != null ? severityMeta(avgSeverity).label : pp.severity}
           </span>
           <h3 className="text-sm font-semibold text-white truncate">{pp.title}</h3>
         </div>
@@ -126,13 +128,27 @@ function PainPointCard({ pp, avgSeverity, onGenerate }) {
 
 // A single feedback row whose text expands on click (full text is otherwise
 // truncated to one line and was previously impossible to read in full).
-function FeedbackRow({ fb }) {
+function FeedbackRow({ fb, onDelete }) {
   const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const meta = severityMeta(fb.rating);
+
+  const handleDelete = async (e) => {
+    e.stopPropagation();
+    if (!window.confirm('Delete this feedback entry? This cannot be undone.')) return;
+    setDeleting(true);
+    try {
+      await onDelete(fb.id);
+    } catch (err) {
+      setDeleting(false);
+      window.alert(err.message || 'Failed to delete feedback.');
+    }
+  };
+
   return (
     <tr
       onClick={() => setOpen((o) => !o)}
-      className="border-b border-gray-800/50 hover:bg-gray-800/20 cursor-pointer align-top"
+      className="border-b border-gray-800/50 hover:bg-gray-800/20 cursor-pointer align-top group"
     >
       <td className="px-5 py-3 whitespace-nowrap">
         <span className="text-white font-medium">{fb.submitter}</span>
@@ -156,13 +172,25 @@ function FeedbackRow({ fb }) {
         </div>
       </td>
       <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">{fb.date}</td>
+      <td className="px-5 py-3 whitespace-nowrap text-right">
+        <button
+          type="button"
+          aria-label="Delete feedback"
+          title="Delete feedback"
+          onClick={handleDelete}
+          disabled={deleting}
+          className="w-7 h-7 rounded-md inline-flex items-center justify-center text-gray-500 opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-red-500/20 hover:text-red-400 transition-all disabled:opacity-50"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </td>
     </tr>
   );
 }
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
-  const { websites, activeWebsite, activeWebsiteId, setActiveWebsite } = useWebsites();
+  const { websites, activeWebsite, activeWebsiteId, setActiveWebsite, removeWebsite } = useWebsites();
   const [feedbackEntries, setFeedbackEntries] = useState([]);
   const [painPoints, setPainPoints] = useState([]);
   const [loading, setLoading] = useState(true); // feedback list loading
@@ -204,6 +232,13 @@ export default function ManagerDashboard() {
 
   const totalFeedback = feedbackEntries.length;
   const criticalCount = painPoints.filter(p => p.severity === 'critical').length;
+
+  // Remove a feedback entry from the backend, then drop it from local state so
+  // the table updates without a full refetch.
+  const handleDeleteFeedback = useCallback(async (id) => {
+    await deleteFeedback(id);
+    setFeedbackEntries((prev) => prev.filter((f) => f.id !== id));
+  }, []);
   // Look up feedback by id so each pain point can show the average severity of
   // its own related submissions (shown per-card now, not in the dashboard header).
   const feedbackById = new Map(feedbackEntries.map((f) => [f.id, f]));
@@ -211,8 +246,7 @@ export default function ManagerDashboard() {
     const rated = (pp.relatedFeedback || [])
       .map((id) => feedbackById.get(id))
       .filter(Boolean);
-    if (!rated.length) return null;
-    return rated.reduce((sum, f) => sum + (f.rating ?? 3), 0) / rated.length;
+    return averageSeverity(rated);
   };
 
   // Route to the solution view for this pain point. Curated pain points keep
@@ -253,20 +287,35 @@ export default function ManagerDashboard() {
           {websites.map((w) => {
             const isActive = w.id === activeWebsiteId;
             return (
-              <button
-                key={w.id}
-                onClick={() => setActiveWebsite(w.id)}
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl border text-sm font-medium transition-all
-                  ${isActive
-                    ? 'bg-indigo-600/20 border-indigo-500/60 text-white scale-[1.02]'
-                    : 'bg-gray-900 border-gray-800 text-gray-400 hover:border-gray-600 hover:text-white'}`}
-              >
-                <span className="text-base leading-none">{w.emoji}</span>
-                {w.name}
-                {w.repoConnected && (
-                  <GitBranch className="w-3 h-3 text-green-400" />
-                )}
-              </button>
+              <div key={w.id} className="relative group">
+                <button
+                  onClick={() => setActiveWebsite(w.id)}
+                  className={`flex items-center gap-2 pl-3.5 pr-8 py-2 rounded-xl border text-sm font-medium transition-all
+                    ${isActive
+                      ? 'bg-indigo-600/20 border-indigo-500/60 text-white scale-[1.02]'
+                      : 'bg-gray-900 border-gray-800 text-gray-400 hover:border-gray-600 hover:text-white'}`}
+                >
+                  <span className="text-base leading-none">{w.emoji}</span>
+                  {w.name}
+                  {w.repoConnected && (
+                    <GitBranch className="w-3 h-3 text-green-400" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Delete ${w.name}`}
+                  title={`Delete ${w.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Delete "${w.name}"? This removes it from your dashboard.`)) {
+                      removeWebsite(w.id);
+                    }
+                  }}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-md flex items-center justify-center text-gray-500 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 transition-all"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             );
           })}
         </div>
@@ -404,11 +453,12 @@ export default function ManagerDashboard() {
                     <th className="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Severity</th>
                     <th className="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Feedback</th>
                     <th className="px-5 py-3 text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th className="px-5 py-3 text-xs font-medium text-gray-500 uppercase text-right"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {feedbackEntries.map((fb) => (
-                    <FeedbackRow key={fb.id} fb={fb} />
+                    <FeedbackRow key={fb.id} fb={fb} onDelete={handleDeleteFeedback} />
                   ))}
                 </tbody>
               </table>

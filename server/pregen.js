@@ -1,42 +1,181 @@
-// Warm the wireframe cache: for every seed website, screenshot its live URL and
-// generate the faithful "before" HTML, storing it in the SQLite DB so the demo
-// shows the before instantly (the expensive vision call is done ahead of time).
+// Pre-generate every expensive AI artifact for the demo, for ALL seed websites,
+// so nothing has to be computed live on stage. Run with: npm run pregen
 //
-// Run with: npm run pregen
+// Phases (each is idempotent — already-cached work is skipped, so re-running is
+// safe and cheap):
+//   1. Wireframe "before"  — faithful HTML of the live site (vision call).
+//   2. Coalesced pain points — AI-clustered feedback per website.
+//   3. Slideshow walkthrough — captured slides for each pain point's top fix.
+//   4. Process flow         — placeholder, wired in once the feature lands.
 //
-// Already-cached websites are skipped, so this is safe to re-run. The on-the-fly
-// GET /api/wireframe endpoint performs the same generation lazily for anything
-// not pre-generated here.
+// The matching GET endpoints generate the same artifacts lazily for anything not
+// warmed here, so pregen only changes *when* the work happens, not the result.
 
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { websites } from '../src/data/mockData.js';
-import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, localScreenshotPath } from './wireframe-service.js';
+import { websites, painPoints as curatedPainPoints } from '../src/data/mockData.js';
+import {
+  ensureWireframeTable,
+  getCachedBefore,
+  getOrCreateBefore,
+  localScreenshotPath,
+  ensureWalkthroughTable,
+  getCachedSlides,
+  generateWalkthroughCached,
+} from './wireframe-service.js';
+import { ensureCoalesceTable, coalesceFeedback } from './coalesce-service.js';
+import { hasToken } from './github-models.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const db = new DatabaseSync(path.join(__dirname, 'feedback.db'));
+
 ensureWireframeTable(db);
+ensureWalkthroughTable(db);
+ensureCoalesceTable(db);
+
+// Websites whose coalesced pain points should be force-refreshed (cache dropped)
+// even if their feedback hash is unchanged — e.g. after manual feedback edits.
+const FORCE_REFRESH_COALESCE = new Set(['viva-engage']);
+
+// Map a raw DB feedback row to the client shape the coalescer + hashing expect.
+const toClient = (row) => ({
+  id: row.id,
+  websiteId: row.website_id,
+  submitter: row.submitter,
+  role: row.role,
+  department: row.department,
+  rating: row.rating,
+  text: row.text,
+  category: row.category,
+  date: (row.created_at || '').slice(0, 10),
+  createdAt: row.created_at,
+});
+
+// Mirror src/pages/PainPointDetail.jsx: pick the fix to walk through (prefer a real
+// wireframe > walkthrough > first solution; else synthesize one) and build the same
+// stable cacheKey the client uses so the warmed slideshow is served verbatim.
+function deriveFix(pp) {
+  const fixSolution =
+    pp.solutions?.find((s) => s.type === 'wireframe') ||
+    pp.solutions?.find((s) => s.type === 'walkthrough') ||
+    pp.solutions?.[0] ||
+    null;
+  const fix = fixSolution
+    ? { title: fixSolution.title, description: fixSolution.description, key: fixSolution.id }
+    : {
+        title: `Make “${pp.title}” easy to discover and use`,
+        description: `Address this user pain point by surfacing the relevant control where users expect it and making the action obvious. Context: ${pp.summary || pp.rootCause || ''}`,
+        key: 'auto',
+      };
+  return { fix, cacheKey: `${pp.id}_${fix.key}` };
+}
+
+const secs = (t) => ((Date.now() - t) / 1000).toFixed(1);
+
+if (!hasToken()) {
+  console.warn('[pregen] ⚠ No GITHUB_TOKEN set — AI phases will fail. Set it to pregenerate everything.');
+}
 
 const targets = websites.filter((w) => w.url || w.screenshotAsset);
-console.log(`[pregen] ${targets.length} website(s) with a URL or bundled screenshot`);
 
-for (const site of targets) {
+// Optional CLI scope: `npm run pregen -- viva-engage teams` warms only those
+// sites. With no args, every seed website is warmed.
+const onlyIds = process.argv.slice(2).filter((a) => a && !a.startsWith('-'));
+const scoped = onlyIds.length ? targets.filter((w) => onlyIds.includes(w.id)) : targets;
+console.log(
+  onlyIds.length
+    ? `[pregen] scoped to ${scoped.length}/${targets.length} site(s): ${scoped.map((w) => w.id).join(', ')}\n`
+    : `[pregen] ${targets.length} seed website(s) to warm\n`
+);
+
+// ── Phase 1 · Wireframe "before" ─────────────────────────────────
+console.log('── Phase 1 · Wireframe before ──');
+for (const site of scoped) {
   if (getCachedBefore(db, site.id)) {
-    console.log(`[pregen] ✓ ${site.id} already cached — skipping`);
+    console.log(`  ✓ ${site.id} already cached`);
     continue;
   }
   const imagePath = localScreenshotPath(site.screenshotAsset);
   const source = imagePath ? `asset:${site.screenshotAsset}` : site.url;
-  const started = Date.now();
-  process.stdout.write(`[pregen] … ${site.id} (${source}) `);
+  const t = Date.now();
+  process.stdout.write(`  … ${site.id} (${source}) `);
   try {
     const before = await getOrCreateBefore(db, { websiteId: site.id, url: site.url, imagePath });
-    console.log(`done — ${before.length} chars in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+    console.log(`done — ${before.length} chars in ${secs(t)}s`);
   } catch (e) {
     console.log(`FAILED — ${e.message}`);
   }
 }
 
-console.log('[pregen] complete');
+// ── Phase 2 · Coalesced pain points ──────────────────────────────
+console.log('\n── Phase 2 · Coalesced pain points ──');
+const feedbackStmt = db.prepare('SELECT * FROM feedback WHERE website_id = ? ORDER BY created_at DESC, rowid DESC');
+const painPointsBySite = new Map();
+for (const site of scoped) {
+  const feedback = feedbackStmt.all(site.id).map(toClient);
+  if (!feedback.length) {
+    console.log(`  – ${site.id} has no feedback — skipping`);
+    continue;
+  }
+  if (FORCE_REFRESH_COALESCE.has(site.id)) {
+    db.prepare('DELETE FROM pain_point_clusters WHERE website_id = ?').run(site.id);
+    console.log(`  ↻ ${site.id} cache dropped (forced refresh)`);
+  }
+  const t = Date.now();
+  process.stdout.write(`  … ${site.id} (${feedback.length} feedback) `);
+  try {
+    const pps = await coalesceFeedback(db, {
+      feedback,
+      websiteId: site.id,
+      curatedPainPoints,
+      allowFallback: false, // throw instead of showing the keyword heuristic
+    });
+    painPointsBySite.set(site.id, pps);
+    console.log(`done — ${pps.length} pain point(s) in ${secs(t)}s`);
+  } catch (e) {
+    console.log(`FAILED — ${e.message}`);
+  }
+}
+
+// ── Phase 3 · Slideshow walkthroughs ─────────────────────────────
+console.log('\n── Phase 3 · Slideshow walkthroughs ──');
+for (const site of scoped) {
+  const pps = painPointsBySite.get(site.id);
+  if (!pps || !pps.length) continue;
+  const imagePath = localScreenshotPath(site.screenshotAsset);
+  for (const pp of pps) {
+    const { fix, cacheKey } = deriveFix(pp);
+    if (getCachedSlides(db, cacheKey)) {
+      console.log(`  ✓ ${cacheKey} already cached`);
+      continue;
+    }
+    const t = Date.now();
+    process.stdout.write(`  … ${cacheKey} `);
+    try {
+      const { slides } = await generateWalkthroughCached(db, {
+        cacheKey,
+        websiteId: site.id,
+        url: site.url || '',
+        imagePath,
+        websiteName: site.name || '',
+        painPointSummary: pp.summary || '',
+        fixTitle: fix.title,
+        fixDescription: fix.description,
+      });
+      console.log(`done — ${slides.length} slide(s) in ${secs(t)}s`);
+    } catch (e) {
+      console.log(`FAILED — ${e.message}`);
+    }
+  }
+}
+
+// ── Phase 4 · Process flow (placeholder) ─────────────────────────
+// TODO: once the process-flow feature is finalized, pregenerate it here for every
+// pain point (mirror PainPointDetail's flow derivation, call generateProcessFlow
+// from solution-service.js, which caches into generated_solutions). Left out for
+// now so pregen stays in lockstep with the shipped UI.
+console.log('\n── Phase 4 · Process flow ── (placeholder — added with the feature)');
+
+console.log('\n[pregen] complete');
 process.exit(0);

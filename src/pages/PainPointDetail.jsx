@@ -2,7 +2,7 @@ import { useParams, useLocation, Link } from 'react-router-dom';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { ArrowLeft, Play, ChevronRight, MessageSquare, AlertCircle, Sparkles, RefreshCw, Clapperboard } from 'lucide-react';
 import { fetchPainPoints, fetchFeedback, generateWalkthrough } from '../utils/api';
-import { severityMeta } from '../utils/severity';
+import { severityMeta, averageSeverity } from '../utils/severity';
 import RefineBox from '../components/RefineBox';
 import DevPromptButton from '../components/DevPromptButton';
 import WalkthroughSlideshow from '../components/WalkthroughSlideshow';
@@ -97,6 +97,10 @@ export default function PainPointDetail() {
         key: 'auto',
       };
 
+  // Severity badge scales off the average severity of this pain point's own
+  // related feedback (1–5), not a volume-weighted impact score.
+  const avgSeverity = averageSeverity(related);
+
   return (
     <div className="max-w-5xl mx-auto px-6 py-10 animate-fade-in">
       <Link to="/dashboard" className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-6 transition-colors">
@@ -105,8 +109,10 @@ export default function PainPointDetail() {
 
       <div className="flex items-center gap-3 mb-4">
         <span className={`text-xs font-bold px-2.5 py-1 rounded-full uppercase tracking-wide
-          ${painPoint.severity === 'critical' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'}`}>
-          {painPoint.severity}
+          ${avgSeverity != null
+            ? severityMeta(avgSeverity).badge
+            : (painPoint.severity === 'critical' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400')}`}>
+          {avgSeverity != null ? severityMeta(avgSeverity).label : painPoint.severity}
         </span>
         {painPoint.derived && (
           <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
