@@ -187,9 +187,10 @@ app.get('/api/pain-points', async (req, res) => {
   res.json({ analyzing: false, error, painPoints });
 });
 
-// Real-time feedback assistant: score + nudges + quick-insert suggestions from a
-// low-latency model (GitHub Models). Returns { ok:false } on any failure so the
-// client keeps its instant heuristic output. The token lives only on the server.
+// Real-time feedback assistant: score + nudges + quick-insert suggestions.
+// Uses GitHub Models when a token is configured, otherwise an instant token-free
+// heuristic grader — so the assistant always works. Returns { ok:false } only for
+// empty input or a client-cancelled request.
 app.post('/api/assist', async (req, res) => {
   const { text, category, hasImages } = req.body || {};
   if (!text || !String(text).trim()) return res.json({ ok: false });

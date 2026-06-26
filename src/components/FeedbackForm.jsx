@@ -23,11 +23,12 @@ function AICompanion({ feedback, category, hasImages, onSuggestInsert }) {
   const prompt = CATEGORY_PROMPTS[category] || CATEGORY_PROMPTS['general'];
   const hasText = !!feedback.trim();
 
-  // Live AI analysis (GitHub Models, via /api/assist): debounced ~400ms with
-  // in-flight cancellation. This is the ONLY source of the quality score, nudges
-  // and suggestions — there is no heuristic grader, so the signals never
-  // flip-flop between two different scorers. The previous AI result stays on
-  // screen while the next one loads, to avoid flicker as the user types.
+  // Live feedback analysis via /api/assist: debounced ~400ms with in-flight
+  // cancellation. The backend grades the draft with GitHub Models when a token is
+  // configured, otherwise an instant token-free heuristic — so the score, nudges
+  // and suggestions always work, with no token required. It is the single source
+  // of these signals (no separate client scorer), so they never flip-flop. The
+  // previous result stays on screen while the next loads, to avoid flicker.
   const [ai, setAi] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(false);
