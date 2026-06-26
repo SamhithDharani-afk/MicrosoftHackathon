@@ -41,7 +41,7 @@ export const websites = [
     id: 'ms-support',
     name: 'Microsoft Support',
     shortName: 'Support',
-    url: 'https://support.microsoft.com/en-us',
+    url: 'http://localhost:4000/microsoft-support.html',
     beforeHtmlAsset: 'ms-support-before.html',
     emoji: '🛟',
     accent: 'cyan',

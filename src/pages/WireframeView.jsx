@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useLocation, Link } from 'react-router-dom';
-import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, Sparkles, RefreshCw, Timer, Maximize2, Minimize2, LayoutTemplate, Image as ImageIcon, Locate } from 'lucide-react';
+import { ArrowLeft, AlertCircle, CheckCircle2, MousePointerClick, Share2, Download, Copy, Link as LinkIcon, Check, Sparkles, RefreshCw, Timer, Maximize2, Minimize2, LayoutTemplate, Image as ImageIcon, Locate, ExternalLink } from 'lucide-react';
 import { wireframes } from '../data/mockData';
 import { resolveWireframeContext, buildPainPointWireframeContext } from '../utils/wireframeContext';
-import { fetchWireframe, generateAfter, fetchScreenshot, fetchPainPoints } from '../utils/api';
+import { fetchWireframe, generateAfter, fetchPainPoints } from '../utils/api';
 import { useWebsites } from '../context/WebsitesContext';
 import RefineBox from '../components/RefineBox';
 import DevPromptButton from '../components/DevPromptButton';
@@ -279,25 +279,11 @@ const CHANGE_MARKER_STYLE =
   '<style id="ff-change-markers">' +
   '@keyframes ffPulse{0%,100%{box-shadow:0 0 0 4px rgba(239,68,68,.18)}' +
   '50%{box-shadow:0 0 0 11px rgba(239,68,68,.28)}}' +
-  '@keyframes ffBob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,6px)}}' +
   '[data-ff-new]{position:relative !important;outline:3px solid #ef4444 !important;' +
   'outline-offset:3px !important;border-radius:6px !important;' +
   'animation:ffPulse 1.6s ease-in-out infinite !important;}' +
-  '[data-ff-new]::after{content:"";position:absolute;top:calc(100% + 6px);' +
-  'left:50%;transform:translateX(-50%);width:30px;height:108px;background:#ef4444;' +
-  'clip-path:polygon(50% 0,100% 34%,60% 34%,60% 100%,40% 100%,40% 34%,0 34%);' +
-  'filter:drop-shadow(0 2px 3px rgba(0,0,0,.35));' +
-  'animation:ffBob 1.4s ease-in-out infinite;' +
-  'z-index:2147483647;pointer-events:none;}' +
-  '[data-ff-new]::before{content:"NEW";position:absolute;top:calc(100% + 122px);' +
-  'left:50%;transform:translateX(-50%);color:#fff;background:#ef4444;' +
-  'border-radius:7px;padding:6px 13px;box-shadow:0 5px 14px rgba(239,68,68,.4);' +
-  'font:800 15px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.1em;' +
-  'animation:ffBob 1.4s ease-in-out infinite;' +
-  'z-index:2147483647;pointer-events:none;white-space:nowrap;}' +
   '@media(prefers-reduced-motion:reduce){' +
-  '[data-ff-new]{animation:none !important;}' +
-  '[data-ff-new]::after,[data-ff-new]::before{animation:none;}}' +
+  '[data-ff-new]{animation:none !important;}}' +
   '</style>';
 
 // Insert the marker CSS into a generated document (before </head>, else after <body>,
@@ -332,6 +318,7 @@ function GeneratedFrame({ html, kind, url }) {
   const [focusTransform, setFocusTransform] = useState('none');
   const [focusTick, setFocusTick] = useState(0);
   const [changeCount, setChangeCount] = useState(0);
+  const [contentH, setContentH] = useState(DESIGN_H);
 
   // The zoom applied to the iframe itself. When focused on a change we always render
   // from the fit-to-width base and add an extra in-place zoom transform on top.
@@ -375,10 +362,29 @@ function GeneratedFrame({ html, kind, url }) {
     }
   }, []);
 
-  // Once the frame loads: prune over-tagging (drop the marker from any element that
-  // wraps another marked element, keeping only the leaf controls), then count the
-  // remaining changes so we can offer a "View changes" zoom.
+  // Measure the generated page's true height so the panel scrolls the WHOLE
+  // document instead of clipping it at the fixed design height.
+  const measureHeight = useCallback(() => {
+    try {
+      const doc = iframeRef.current?.contentDocument;
+      if (!doc) return;
+      const h = Math.max(
+        DESIGN_H,
+        doc.documentElement?.scrollHeight || 0,
+        doc.body?.scrollHeight || 0,
+      );
+      setContentH(h);
+    } catch {
+      setContentH(DESIGN_H);
+    }
+  }, []);
+
+  // Once the frame loads: measure its height, then (for "after") prune over-tagging
+  // (drop the marker from any element that wraps another marked element, keeping
+  // only the leaf controls) and count the remaining changes for the "View changes"
+  // zoom.
   const handleIframeLoad = useCallback(() => {
+    measureHeight();
     if (!isAfter) {
       setChangeCount(0);
       return;
@@ -392,7 +398,7 @@ function GeneratedFrame({ html, kind, url }) {
     }
     changeIdxRef.current = 0;
     setChangeCount(readChanges().length);
-  }, [isAfter, readChanges]);
+  }, [isAfter, readChanges, measureHeight]);
 
   const resetZoom = useCallback(() => {
     setFocused(false);
@@ -483,7 +489,7 @@ function GeneratedFrame({ html, kind, url }) {
         <div
           style={{
             width: DESIGN_W * baseScale,
-            height: DESIGN_H * baseScale,
+            height: contentH * baseScale,
             transform: focused ? focusTransform : 'none',
             transformOrigin: '0 0',
             transition: 'transform .45s cubic-bezier(.4,0,.2,1)',
@@ -494,10 +500,10 @@ function GeneratedFrame({ html, kind, url }) {
             ref={iframeRef}
             onLoad={handleIframeLoad}
             srcDoc={safeHtml}
-            sandbox={isAfter ? 'allow-same-origin' : ''}
+            sandbox="allow-same-origin"
             style={{
               width: DESIGN_W,
-              height: DESIGN_H,
+              height: contentH,
               border: 0,
               transform: `scale(${baseScale})`,
               transformOrigin: 'top left',
@@ -510,7 +516,7 @@ function GeneratedFrame({ html, kind, url }) {
         {hasChange && (
           <span className="inline-flex items-center gap-1.5 text-red-400">
             <span className="inline-block w-3 h-3 rounded-sm border-2 border-red-500" />
-            red outline + “NEW ▲” arrow marks the change
+            red outline marks the change
           </span>
         )}
       </div>
@@ -601,12 +607,9 @@ export default function WireframeView() {
   const [afterLoading, setAfterLoading] = useState(false);
   const [afterError, setAfterError] = useState('');
 
-  // Before panel can show the reconstructed wireframe OR a live screenshot of the
-  // real page. The screenshot is fetched lazily the first time "Live page" is picked.
+  // Before panel can show the reconstructed wireframe OR the live page embedded
+  // directly from its URL.
   const [beforeMode, setBeforeMode] = useState('wireframe'); // 'wireframe' | 'live'
-  const [shot, setShot] = useState('');
-  const [shotLoading, setShotLoading] = useState(false);
-  const [shotError, setShotError] = useState('');
 
   // Pain point + website name powering the dev-prompt handoff. For pain-point
   // routes it comes via nav state; for curated solution ids we synthesize one.
@@ -660,40 +663,6 @@ export default function WireframeView() {
       active = false;
     };
   }, [ctx, afterCacheKey]);
-
-  // Lazily capture the live page the first time the "Live page" toggle is used.
-  // A ref guards against re-entry: shot/shotLoading must NOT be in the dep array,
-  // or setShotLoading(true) would re-run this effect and its cleanup would abort
-  // the in-flight request (leaving it stuck on "Capturing…").
-  const shotStartedRef = useRef(false);
-  useEffect(() => {
-    shotStartedRef.current = false; // a new context can capture afresh
-    setShot('');
-    setShotError('');
-  }, [ctx]);
-  useEffect(() => {
-    if (beforeMode !== 'live' || !ctx || shotStartedRef.current) return undefined;
-    shotStartedRef.current = true;
-    let active = true;
-    setShotLoading(true);
-    setShotError('');
-    fetchScreenshot(ctx.websiteId, ctx.url)
-      .then((data) => {
-        if (active) setShot(data.image || '');
-      })
-      .catch((err) => {
-        if (active) {
-          setShotError(err.message || 'Could not capture the live page.');
-          shotStartedRef.current = false; // allow a retry on next toggle
-        }
-      })
-      .finally(() => {
-        if (active) setShotLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [beforeMode, ctx]);
 
   const handleGenerate = useCallback(async (refinement) => {
     if (!ctx) return;
@@ -772,45 +741,51 @@ export default function WireframeView() {
     );
   }
 
-  // Before panel: live screenshot OR reconstructed wireframe, with a toggle.
+  // Before panel "Live page" mode: embed the real URL directly in an iframe (host
+  // it straight) instead of a screenshot. Works for embeddable pages (e.g. the
+  // local demo site); sites that send X-Frame-Options / CSP frame-ancestors will
+  // refuse to load, so we also offer an "Open" link to the page in a new tab.
   const renderLiveShot = () => {
-    if (shotLoading) {
+    if (!ctx.url) {
       return (
-        <div className="rounded-xl border-2 border-red-500/30 bg-gray-900 h-[300px] flex items-center justify-center">
-          <div className="text-center">
-            <RefreshCw className="w-7 h-7 text-red-400/80 mx-auto mb-3 animate-spin" />
-            <p className="text-sm text-gray-300">Capturing the live page…</p>
-          </div>
-        </div>
-      );
-    }
-    if (shot) {
-      return (
-        <div className="rounded-xl border-2 border-red-500/40 overflow-hidden">
-          <div className="bg-gray-800 px-4 py-2 flex items-center gap-2 border-b border-gray-700">
-            <div className="flex gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-red-500/60" />
-              <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
-              <div className="w-3 h-3 rounded-full bg-green-500/60" />
-            </div>
-            <div className="flex-1 mx-3 min-w-0">
-              <div className="bg-gray-700 rounded-md px-3 py-1 text-xs text-gray-400 truncate flex items-center gap-1.5">
-                <span className="text-gray-500">🔒</span> {ctx.url || 'live page'}
-              </div>
-            </div>
-          </div>
-          <div className="overflow-auto bg-white" style={{ height: 460 }}>
-            <img src={shot} alt="Live page" className="w-full block" />
-          </div>
-          <div className="px-4 py-2 text-xs font-medium flex items-center gap-2 bg-red-500/10 text-red-400">
-            <span>📸 Live page — actual current screenshot</span>
-          </div>
+        <div className="rounded-xl border-2 border-red-500/30 bg-gray-900 h-[300px] flex items-center justify-center text-sm text-gray-500 px-6 text-center">
+          No live URL is configured for this website.
         </div>
       );
     }
     return (
-      <div className="rounded-xl border-2 border-red-500/30 bg-gray-900 h-[300px] flex items-center justify-center text-sm text-gray-500 px-6 text-center">
-        {shotError || 'Could not capture the live page.'}
+      <div className="rounded-xl border-2 border-red-500/40 overflow-hidden">
+        <div className="bg-gray-800 px-4 py-2 flex items-center gap-2 border-b border-gray-700">
+          <div className="flex gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-red-500/60" />
+            <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
+            <div className="w-3 h-3 rounded-full bg-green-500/60" />
+          </div>
+          <div className="flex-1 mx-3 min-w-0">
+            <div className="bg-gray-700 rounded-md px-3 py-1 text-xs text-gray-400 truncate flex items-center gap-1.5">
+              <span className="text-gray-500">🔒</span> {ctx.url}
+            </div>
+          </div>
+          <a
+            href={ctx.url}
+            target="_blank"
+            rel="noreferrer"
+            title="Open the live page in a new tab"
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-gray-300 hover:text-white hover:bg-gray-700 transition-colors flex-shrink-0"
+          >
+            <ExternalLink className="w-3.5 h-3.5" /> Open
+          </a>
+        </div>
+        <div className="bg-white" style={{ height: 460 }}>
+          <iframe
+            title="Live page"
+            src={ctx.url}
+            className="w-full h-full border-0"
+          />
+        </div>
+        <div className="px-4 py-2 text-xs font-medium flex items-center gap-2 bg-red-500/10 text-red-400">
+          <span>🌐 Live page — the real site, embedded directly</span>
+        </div>
       </div>
     );
   };
