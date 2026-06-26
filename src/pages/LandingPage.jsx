@@ -3,7 +3,10 @@ import { MessageSquarePlus, BarChart3, Workflow, ArrowRight, Globe, X, Check, Sh
 
 export default function LandingPage() {
   return (
-    <div className="animate-fade-in">
+    <div className="relative">
+      {/* Ambient page background (decorative) */}
+      <div className="landing-bg" aria-hidden="true" />
+      <div className="animate-fade-in">
       {/* Hero */}
       <section className="max-w-5xl mx-auto px-6 pt-20 pb-16 text-center">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-medium mb-8">
@@ -152,7 +155,6 @@ export default function LandingPage() {
       {/* Live Example Banner */}
       <section className="max-w-4xl mx-auto px-6 pb-20">
         <div className="bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-500/30 rounded-2xl p-8 text-center">
-          <h3 className="text-xl font-bold text-white mb-3">🔥 3 live example websites loaded</h3>
           <p className="text-gray-300 mb-6">
             Explore the dashboards for <strong>Viva Engage</strong>, <strong>Microsoft Teams</strong>, and{' '}
             <strong>Outlook Web</strong>. Each shows the distinct pain points its own users reported —
@@ -177,6 +179,7 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+      </div>
     </div>
   );
 }

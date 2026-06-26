@@ -7,8 +7,7 @@ function getInitialTheme() {
   if (typeof window === 'undefined') return 'dark';
   const saved = window.localStorage.getItem(STORAGE_KEY);
   if (saved === 'light' || saved === 'dark') return saved;
-  // App is dark-first; only honor an explicit OS light preference as a default.
-  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
+  // App is dark-first: default to dark for new visitors regardless of OS theme.
   return 'dark';
 }
 

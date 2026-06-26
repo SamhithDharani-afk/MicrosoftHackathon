@@ -68,6 +68,10 @@ const EFFORT = process.env.WIREFRAME_EFFORT || 'low';
 const GEN_TIMEOUT_MS = Number(process.env.WIREFRAME_TIMEOUT_MS) || 150000;
 // Viewport used for both the screenshot and the reproduction target.
 const VIEWPORT = { width: 1280, height: 900 };
+// Upper bound for full-page captures. Very tall pages (infinite scroll, huge
+// footers) would otherwise produce enormous PNGs that the vision model downscales
+// into illegibility; clamp the captured height so the reproduction stays faithful.
+const MAX_FULLPAGE_H = Number(process.env.WIREFRAME_MAX_FULLPAGE_H) || 6000;
 
 const REAL_HOME = path.join(os.homedir(), '.copilot');
 const EPHEMERAL_HOME = path.join(os.tmpdir(), 'feedbackflow-copilot-home');
@@ -129,7 +133,9 @@ let queue = Promise.resolve(); // serialize CLI calls within this process
 
 // Screenshot the live page to a temp PNG. Returns the file path, or '' on any
 // failure (bad URL, navigation timeout, launch error) so callers can react.
-async function screenshotUrl(url) {
+// fullPage:true captures the entire scrollable document (not just the 900px
+// fold), clamped to MAX_FULLPAGE_H so pathologically tall pages stay legible.
+async function screenshotUrl(url, { fullPage = false } = {}) {
   if (!url) return '';
   let browser;
   try {
@@ -145,7 +151,22 @@ async function screenshotUrl(url) {
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     }
     await page.waitForTimeout(1200);
-    await page.screenshot({ path: file });
+    if (fullPage) {
+      const scrollH = await page
+        .evaluate(() => document.documentElement.scrollHeight)
+        .catch(() => 0);
+      if (scrollH && scrollH > MAX_FULLPAGE_H) {
+        // Too tall for a faithful full-page shot — capture the top MAX_FULLPAGE_H.
+        await page.screenshot({
+          path: file,
+          clip: { x: 0, y: 0, width: VIEWPORT.width, height: MAX_FULLPAGE_H },
+        });
+      } else {
+        await page.screenshot({ path: file, fullPage: true });
+      }
+    } else {
+      await page.screenshot({ path: file });
+    }
     return file;
   } catch {
     return '';
@@ -297,6 +318,58 @@ export async function generateWalkthroughCached(db, opts) {
   return result;
 }
 
+// Simulated-usage GIFs are as expensive as slideshows (apply the fix + Playwright
+// frame-by-frame capture + GIF encode), so they're cached per (cache_key) — the
+// same stable `painPointId_fixKey` the client uses — letting `npm run pregen` warm
+// them ahead of the demo and serve them instantly as a plain <img>.
+export function ensureWalkthroughVideoTable(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS walkthrough_videos (
+      cache_key    TEXT PRIMARY KEY,
+      website_id   TEXT,
+      json         TEXT NOT NULL,
+      created_at   TEXT NOT NULL
+    );
+  `);
+}
+
+export function getCachedVideo(db, cacheKey) {
+  if (!cacheKey) return null;
+  const row = db.prepare('SELECT json FROM walkthrough_videos WHERE cache_key = ?').get(cacheKey);
+  if (!row || !row.json) return null;
+  try {
+    const parsed = JSON.parse(row.json);
+    return parsed && parsed.gif ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function putCachedVideo(db, cacheKey, websiteId, value) {
+  if (!cacheKey) return;
+  db.prepare(`
+    INSERT INTO walkthrough_videos (cache_key, website_id, json, created_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(cache_key) DO UPDATE SET
+      website_id = excluded.website_id,
+      json = excluded.json,
+      created_at = excluded.created_at
+  `).run(cacheKey, websiteId || '', JSON.stringify(value), new Date().toISOString());
+}
+
+// Cached wrapper around generateWalkthroughVideo: return the stored GIF for this
+// cacheKey when present (unless `refresh`), otherwise render it and cache it.
+export async function generateWalkthroughVideoCached(db, opts) {
+  const { cacheKey, refresh } = opts;
+  if (cacheKey && !refresh) {
+    const cached = getCachedVideo(db, cacheKey);
+    if (cached) return cached;
+  }
+  const result = await generateWalkthroughVideo(db, opts);
+  putCachedVideo(db, cacheKey, opts.websiteId, result);
+  return result;
+}
+
 
 export function getCachedScreenshot(db, websiteId) {
   const row = db
@@ -358,7 +431,7 @@ async function generateBefore({ url, imagePath }) {
   if (imagePath && existsSync(imagePath)) {
     shot = imagePath; // bundled asset — do not delete it afterwards
   } else if (url) {
-    shot = await screenshotUrl(url);
+    shot = await screenshotUrl(url, { fullPage: true });
     isTemp = !!shot;
   }
   if (!shot) {

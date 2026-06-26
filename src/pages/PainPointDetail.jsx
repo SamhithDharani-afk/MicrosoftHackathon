@@ -244,6 +244,7 @@ export default function PainPointDetail() {
             painPointSummary={painPoint.summary}
             fixTitle={fix.title}
             fixDescription={fix.description}
+            cacheKey={`${painPoint.id}_${fix.key}`}
           />
         </section>
       )}

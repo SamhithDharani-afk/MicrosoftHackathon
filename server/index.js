@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { feedbackEntries as seedFeedback, painPoints as curatedPainPoints, websites } from '../src/data/mockData.js';
-import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath, generateWalkthroughCached as generateSlideshowWalkthroughCached, getCachedSlides, ensureWalkthroughTable, generateDevPrompt as generateWireframeDevPrompt, generateWalkthroughVideo } from './wireframe-service.js';
+import { ensureWireframeTable, getCachedBefore, getOrCreateBefore, applyFix, getOrCreateScreenshot, localScreenshotPath, localHtmlPath, generateWalkthroughCached as generateSlideshowWalkthroughCached, getCachedSlides, ensureWalkthroughTable, generateDevPrompt as generateWireframeDevPrompt, generateWalkthroughVideoCached, getCachedVideo, ensureWalkthroughVideoTable } from './wireframe-service.js';
 import { assistFeedback } from './assist-service.js';
 import { hasToken } from './github-models.js';
 import {
@@ -44,6 +44,9 @@ ensureWireframeTable(db);
 
 // Slideshow walkthrough cache (pre-generated captioned slides per pain-point fix).
 ensureWalkthroughTable(db);
+
+// Simulated-usage GIF cache (pre-generated animated GIF per pain-point fix).
+ensureWalkthroughVideoTable(db);
 
 // AI pain-point cluster cache (semantic coalescing of feedback per website).
 ensureCoalesceTable(db);
@@ -340,6 +343,8 @@ app.get('/api/walkthrough/slideshow', (req, res) => {
 
 // Generate a simulated-usage GIF: apply the fix, then render a fake cursor finding
 // and "using" each change frame by frame, returned as an animated GIF data URL.
+// Results are cached per `cacheKey` (the stable painPointId_fixKey), so `npm run
+// pregen` can warm them and repeat visits are instant; pass `refresh` to rebuild.
 app.post('/api/walkthrough-video', async (req, res) => {
   const b = req.body || {};
   if (!b.websiteId || !b.fixTitle) {
@@ -347,7 +352,9 @@ app.post('/api/walkthrough-video', async (req, res) => {
   }
   const liveUrl = resolveUrl(b.websiteId, b.url);
   try {
-    const { gif, changeCount, after } = await generateWalkthroughVideo(db, {
+    const { gif, changeCount, after } = await generateWalkthroughVideoCached(db, {
+      cacheKey: b.cacheKey ? String(b.cacheKey) : '',
+      refresh: !!b.refresh,
       websiteId: String(b.websiteId),
       url: liveUrl,
       imagePath: resolveImage(b.websiteId),
@@ -360,6 +367,17 @@ app.post('/api/walkthrough-video', async (req, res) => {
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
+});
+
+// Return a pre-generated simulated-usage GIF (from `npm run pregen`) for a cache
+// key, or 404 when none is cached — lets the client show a warmed simulation
+// instantly without triggering generation.
+app.get('/api/walkthrough-video', (req, res) => {
+  const cacheKey = req.query.cacheKey ? String(req.query.cacheKey) : '';
+  if (!cacheKey) return res.status(400).json({ error: 'cacheKey is required' });
+  const cached = getCachedVideo(db, cacheKey);
+  if (!cached) return res.status(404).json({ error: 'No pre-generated simulation for this cache key' });
+  res.json(cached);
 });
 
 // ── AI-generated solution artifacts (per pain point) ───────────────────────

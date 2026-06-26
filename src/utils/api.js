@@ -171,6 +171,18 @@ export async function generateWalkthroughVideo(payload) {
   return data; // { gif, changeCount, after }
 }
 
+// Fetch a pre-generated simulated-usage GIF (warmed by `npm run pregen`) for a
+// cache key. Returns { gif, changeCount, after } on a cache hit, or null when
+// nothing is cached.
+export async function fetchCachedWalkthroughVideo(cacheKey) {
+  if (!cacheKey) return null;
+  const res = await fetch(`/api/walkthrough-video?cacheKey=${encodeURIComponent(cacheKey)}`);
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!data.gif) return null;
+  return data; // { gif, changeCount, after }
+}
+
 // Generate a before/after process-flow diagram for a pain point. The server
 // returns a structured flow ({ title, description, start, oldSteps, … }) which
 // the client lays out with buildProcessFlow(). Pass `refinement` to regenerate.

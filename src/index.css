@@ -36,6 +36,47 @@ body {
 @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 .animate-fade-in { animation: fade-in 0.4s ease-out; }
 
+/* ============================================================================
+   LANDING PAGE AMBIENT BACKGROUND
+   A clean, fixed decorative layer that sits behind all landing content: soft
+   indigo / purple / cyan glows (matching the accent palette) plus a faint grid
+   that fades out toward the edges. `aria-hidden` + pointer-events:none so it is
+   purely cosmetic. Kept subtle so it reads as atmosphere, not noise.
+   ============================================================================ */
+.landing-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(58rem 46rem at 50% -12%, rgba(99, 102, 241, 0.20), transparent 60%),
+    radial-gradient(46rem 42rem at 108% 6%, rgba(168, 85, 247, 0.16), transparent 55%),
+    radial-gradient(40rem 40rem at -8% 24%, rgba(56, 189, 248, 0.12), transparent 55%);
+}
+.landing-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(75% 60% at 50% 0%, #000 25%, transparent 78%);
+  mask-image: radial-gradient(75% 60% at 50% 0%, #000 25%, transparent 78%);
+}
+/* Light mode: soften the glows so they read as gentle tints, not bright blooms. */
+html.light .landing-bg {
+  background:
+    radial-gradient(58rem 46rem at 50% -12%, rgba(99, 102, 241, 0.12), transparent 60%),
+    radial-gradient(46rem 42rem at 108% 6%, rgba(168, 85, 247, 0.10), transparent 55%),
+    radial-gradient(40rem 40rem at -8% 24%, rgba(56, 189, 248, 0.08), transparent 55%);
+}
+html.light .landing-bg::after {
+  background-image:
+    linear-gradient(to right, rgba(71, 85, 105, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(71, 85, 105, 0.06) 1px, transparent 1px);
+}
+
 @keyframes pulse-glow {
   0%, 100% { box-shadow: 0 0 5px rgba(99, 102, 241, 0.3); }
   50% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.5); }

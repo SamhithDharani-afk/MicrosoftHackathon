@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Send, CheckCircle2, ImagePlus, X, Sparkles, MessageCircle, Lightbulb, AlertTriangle, ChevronRight } from 'lucide-react';
 import { useWebsites } from '../context/WebsitesContext';
-import { submitFeedback, assistFeedback } from '../utils/api';
+import { submitFeedback } from '../utils/api';
 import { severityMeta } from '../utils/severity';
 
 // ──────────────────────────────────────────────
@@ -19,65 +19,80 @@ const CATEGORY_PROMPTS = {
   'navigation': "What were you looking for, and where did you expect to find it? How many clicks did it take?",
 };
 
-function AICompanion({ feedback, category, hasImages, onSuggestInsert }) {
+// ──────────────────────────────────────────────
+// Hard-coded demo analyzer (deterministic, no network).
+// A token (word) counter drives a fixed two-stage script with a fake 0.8s
+// "analysis" delay so the live demo always plays out the same way.
+// ──────────────────────────────────────────────
+const STAGE1_TOKENS = 6;   // e.g. "I couldn't find the settings button, it took me 10 minutes."
+// Stage 2 only unlocks once the user names WHERE the button should be — i.e. the
+// recommended "...on the top bar" detail. Matching "bar" is the reliable signal
+// that the full target sentence has been completed (the first sentence has none),
+// so "Great detail" can't pre-fire mid-typing on a raw token count.
+const STAGE2_PATTERN = /\bbar\b/i;
+const FAKE_ANALYSIS_MS = 800;
+
+const STAGE1_SUGGESTIONS = [
+  'I expected the settings button to be ___',
+  'It was located in the ___',
+];
+
+function countTokens(text) {
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+// Map the draft text to the fixed grade / nudges / suggestions for that stage.
+function gradeTokens(text) {
+  const tokens = countTokens(text);
+  if (tokens >= STAGE1_TOKENS && STAGE2_PATTERN.test(text)) {
+    // Stage 2 — they named where the button should be ("...top bar"). Done: say
+    // "Great detail", stop recommending, no complaints.
+    return {
+      score: 92,
+      nudges: [{ id: 'great', type: 'success', message: 'Great detail — thanks, this is exactly what we need.' }],
+      suggestions: [],
+    };
+  }
+  if (tokens >= STAGE1_TOKENS) {
+    // Stage 1 — "Needs more detail" with two fill-in-the-blank prompts.
+    return { score: 28, nudges: [], suggestions: STAGE1_SUGGESTIONS };
+  }
+  // Below stage 1 — too little to grade yet.
+  return { score: 12, nudges: [], suggestions: [] };
+}
+
+function AICompanion({ feedback, category, onSuggestInsert }) {
   const prompt = CATEGORY_PROMPTS[category] || CATEGORY_PROMPTS['general'];
   const hasText = !!feedback.trim();
 
-  // Live AI analysis (GitHub Models, via /api/assist): debounced ~400ms with
-  // in-flight cancellation. This is the ONLY source of the quality score, nudges
-  // and suggestions — there is no heuristic grader, so the signals never
-  // flip-flop between two different scorers. The previous AI result stays on
-  // screen while the next one loads, to avoid flicker as the user types.
+  // Hard-coded demo analyzer: a token (word) counter drives a fixed two-stage
+  // script (see gradeTokens) with a fake 0.8s "analysis" delay, so the live demo
+  // is fully deterministic — no model call. The previous result stays on screen
+  // while the next one is "analyzing", to avoid flicker as the user types.
   const [ai, setAi] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState(false);
   useEffect(() => {
     if (!hasText) {
       setAi(null);
       setAiLoading(false);
-      setAiError(false);
       return undefined;
     }
-    const controller = new AbortController();
     setAiLoading(true);
-    setAiError(false);
-    const timer = setTimeout(async () => {
-      try {
-        const r = await assistFeedback({ text: feedback, category, hasImages }, controller.signal);
-        if (controller.signal.aborted) return;
-        if (r && r.ok) {
-          setAi(r);
-        } else {
-          setAi(null);
-          setAiError(true);
-        }
-      } catch (err) {
-        if (err?.name !== 'AbortError') {
-          setAi(null);
-          setAiError(true);
-        }
-      } finally {
-        if (!controller.signal.aborted) setAiLoading(false);
-      }
-    }, 400);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [feedback, category, hasImages, hasText]);
+    const timer = setTimeout(() => {
+      setAi(gradeTokens(feedback));
+      setAiLoading(false);
+    }, FAKE_ANALYSIS_MS);
+    return () => clearTimeout(timer);
+  }, [feedback, hasText]);
 
   const feedbackScore = ai ? ai.score : 0;
   const nudges = ai ? ai.nudges : [];
   const suggestions = ai ? ai.suggestions : [];
 
-  const scoreColor = feedbackScore >= 70 ? 'text-green-400' : feedbackScore >= 40 ? 'text-amber-400' : 'text-gray-500';
-  const scoreLabel = feedbackScore >= 70 ? 'Great detail' : feedbackScore >= 40 ? 'Getting there' : 'Needs more detail';
+  const scoreColor = feedbackScore >= 60 ? 'text-green-400' : feedbackScore >= 30 ? 'text-amber-400' : 'text-gray-500';
+  const scoreLabel = feedbackScore >= 60 ? 'Great detail' : feedbackScore >= 30 ? 'Getting there' : 'Needs more detail';
 
-  const subtitle = aiLoading
-    ? 'Analyzing your feedback…'
-    : aiError
-    ? 'AI analysis unavailable'
-    : 'AI-powered feedback coaching';
+  const subtitle = aiLoading ? 'Analyzing your feedback…' : 'AI-powered feedback coaching';
 
   return (
     <div className="space-y-4">
@@ -104,19 +119,12 @@ function AICompanion({ feedback, category, hasImages, onSuggestInsert }) {
               <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${
-                    feedbackScore >= 70 ? 'bg-green-500' : feedbackScore >= 40 ? 'bg-amber-500' : 'bg-gray-500'
+                    feedbackScore >= 60 ? 'bg-green-500' : feedbackScore >= 30 ? 'bg-amber-500' : 'bg-gray-500'
                   }`}
                   style={{ width: `${feedbackScore}%` }}
                 />
               </div>
             </>
-          ) : aiError ? (
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="w-3.5 h-3.5 text-gray-500 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-gray-500 leading-relaxed">
-                Couldn't reach the AI grader — your feedback will still be submitted.
-              </p>
-            </div>
           ) : (
             <>
               <div className="flex items-center justify-between mb-2">
@@ -508,7 +516,6 @@ export default function FeedbackForm({ lockedWebsiteId = null, showDashboardLink
           <AICompanion
             feedback={form.feedback}
             category={form.category}
-            hasImages={images.length > 0}
             onSuggestInsert={handleSuggestInsert}
           />
         </div>

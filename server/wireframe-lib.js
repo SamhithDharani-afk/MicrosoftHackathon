@@ -26,8 +26,12 @@ export function buildBeforePrompt() {
     `RULES (follow exactly):\n` +
     `- Output ONE complete HTML5 file with inline <style> only. ` +
     `No external/network requests, no <img>, no SVG, no scripts, no libraries.\n` +
+    `- The screenshot is a FULL-PAGE capture (1280px wide, scrolled from top to ` +
+    `bottom — it may be tall). Reproduce the ENTIRE page top to bottom, including ` +
+    `everything below the fold (all sections, lists, and the footer). Do NOT crop, ` +
+    `summarize, or stop at the first screenful.\n` +
     `- Match the screenshot as closely as you can: same overall layout, color ` +
-    `palette, text, fonts, spacing and proportions, targeting a 1280x900 viewport.\n` +
+    `palette, text, fonts, spacing and proportions, at a 1280px content width.\n` +
     `- Use the real text visible in the screenshot; for anything illegible use a ` +
     `brief realistic placeholder.\n` +
     `- ZERO commentary or meta-text. Do NOT add captions, legends, callouts, ` +

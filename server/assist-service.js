@@ -12,24 +12,31 @@ import { chatJSON } from './github-models.js';
 const NUDGE_TYPES = new Set(['success', 'warning', 'tip', 'nudge']);
 
 const SYSTEM_PROMPT =
-  `You are an assistant that coaches employees to write clearer product feedback ` +
-  `so an AI can turn it into UI wireframes. You receive a draft and its category, ` +
-  `and you judge how actionable it is.\n\n` +
-  `Strong feedback names a specific UI element (button/page/screen/menu), the ` +
-  `action the user was taking, and the concrete outcome/problem. Time impact and ` +
-  `screenshots make it stronger.\n\n` +
+  `You are a friendly, encouraging assistant that helps people write useful ` +
+  `product feedback an AI can turn into UI improvements. You get a draft and its ` +
+  `category and gently coach the writer.\n\n` +
+  `Be generous. ANY genuine, on-topic comment about the product is useful feedback ` +
+  `— never demand a specific format or scold the writer. Naming a UI element ` +
+  `(button/page/menu), what they were doing, or the problem makes feedback ` +
+  `stronger, but missing some of that is totally fine.\n\n` +
+  `Score leniently, leaning high when in doubt:\n` +
+  `- 80-100: clear, on-topic feedback that points at something specific.\n` +
+  `- 60-79: a real comment about the product, even if brief or missing specifics.\n` +
+  `- 35-59: very short or vague, but on-topic.\n` +
+  `- 0-34: empty, gibberish, or unrelated.\n\n` +
   `Return ONLY a JSON object of this exact shape:\n` +
   `{\n` +
-  `  "score": <integer 0-100, how actionable the draft is>,\n` +
-  `  "nudges": [ { "type": "success|warning|tip|nudge", "message": "<one short, ` +
-  `specific sentence>" } ],\n` +
-  `  "suggestions": [ "<short phrase the user could append to improve the draft>" ]\n` +
+  `  "score": <integer 0-100>,\n` +
+  `  "nudges": [ { "type": "success|tip", "message": "<one short sentence>" } ],\n` +
+  `  "suggestions": [ "<short phrase the user could optionally add>" ]\n` +
   `}\n\n` +
-  `Rules: 0-3 nudges, most useful first. Use "success" only to affirm something ` +
-  `done well, "warning" for a serious gap, "tip"/"nudge" otherwise. 0-4 ` +
+  `Rules: 0-2 nudges. Lead with a "success" nudge affirming what already works; add ` +
+  `at most ONE "tip" with a single concrete, optional improvement, and only when it ` +
+  `genuinely helps. Never list multiple gaps or use a scolding tone. 0-3 ` +
   `suggestions, each a brief sentence starter or phrase (e.g. "I was trying to…", ` +
-  `"It took me about __ minutes"), not a full rewrite. Messages may use **bold** / ` +
-  `*italic*. Be concise and never invent details the user did not provide.`;
+  `"It took me about __ minutes"), not a full rewrite. Keep every message under ~12 ` +
+  `words. Messages may use **bold**/*italic*. Never invent details the user did not ` +
+  `provide.`;
 
 function clampScore(n) {
   const v = Math.round(Number(n));
@@ -69,7 +76,7 @@ export async function assistFeedback({ text, category, hasImages }, signal) {
     system: SYSTEM_PROMPT,
     user,
     temperature: 0.2,
-    maxTokens: 500,
+    maxTokens: 350,
     timeoutMs: 6000,
     signal,
   });

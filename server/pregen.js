@@ -26,6 +26,9 @@ import {
   ensureWalkthroughTable,
   getCachedSlides,
   generateWalkthroughCached,
+  ensureWalkthroughVideoTable,
+  getCachedVideo,
+  generateWalkthroughVideoCached,
 } from './wireframe-service.js';
 import { ensureCoalesceTable, coalesceFeedback } from './coalesce-service.js';
 import { hasToken } from './github-models.js';
@@ -35,6 +38,7 @@ const db = new DatabaseSync(path.join(__dirname, 'feedback.db'));
 
 ensureWireframeTable(db);
 ensureWalkthroughTable(db);
+ensureWalkthroughVideoTable(db);
 ensureCoalesceTable(db);
 
 // Websites whose coalesced pain points should be force-refreshed (cache dropped)
@@ -174,12 +178,44 @@ for (const site of scoped) {
   }
 }
 
-// ── Phase 4 · Process flow (placeholder) ─────────────────────────
+// ── Phase 4 · Simulated-usage GIFs ───────────────────────────────
+console.log('\n── Phase 4 · Simulated-usage GIFs ──');
+for (const site of scoped) {
+  const pps = painPointsBySite.get(site.id);
+  if (!pps || !pps.length) continue;
+  const imagePath = localScreenshotPath(site.screenshotAsset);
+  for (const pp of pps) {
+    const { fix, cacheKey } = deriveFix(pp);
+    if (getCachedVideo(db, cacheKey)) {
+      console.log(`  ✓ ${cacheKey} already cached`);
+      continue;
+    }
+    const t = Date.now();
+    process.stdout.write(`  … ${cacheKey} `);
+    try {
+      const { changeCount } = await generateWalkthroughVideoCached(db, {
+        cacheKey,
+        websiteId: site.id,
+        url: site.url || '',
+        imagePath,
+        websiteName: site.name || '',
+        painPointSummary: pp.summary || '',
+        fixTitle: fix.title,
+        fixDescription: fix.description,
+      });
+      console.log(`done — ${changeCount} change(s) in ${secs(t)}s`);
+    } catch (e) {
+      console.log(`FAILED — ${e.message}`);
+    }
+  }
+}
+
+// ── Phase 5 · Process flow (placeholder) ─────────────────────────
 // TODO: once the process-flow feature is finalized, pregenerate it here for every
 // pain point (mirror PainPointDetail's flow derivation, call generateProcessFlow
 // from solution-service.js, which caches into generated_solutions). Left out for
 // now so pregen stays in lockstep with the shipped UI.
-console.log('\n── Phase 4 · Process flow ── (placeholder — added with the feature)');
+console.log('\n── Phase 5 · Process flow ── (placeholder — added with the feature)');
 
 console.log('\n[pregen] complete');
 process.exit(0);

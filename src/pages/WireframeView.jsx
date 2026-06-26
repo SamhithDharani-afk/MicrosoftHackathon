@@ -975,7 +975,7 @@ export default function WireframeView() {
       {view === 'comparison' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div>
-            <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center justify-between gap-2 mb-3 min-h-[34px]">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-red-400" />
                 <span className="text-sm font-medium text-red-300">Current (Problem)</span>
@@ -985,7 +985,7 @@ export default function WireframeView() {
             {renderBefore()}
           </div>
           <div>
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-3 min-h-[34px]">
               <CheckCircle2 className="w-4 h-4 text-green-400" />
               <span className="text-sm font-medium text-green-300">Proposed (Solution)</span>
             </div>
