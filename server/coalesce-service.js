@@ -1,21 +1,22 @@
 // Pain-Point Coalescer — real-AI clustering of a website's feedback.
 //
 // Replaces the keyword TOPICS matching in src/data/clustering.js with a semantic
-// model call (GitHub Models gpt-4o-mini): it groups a website's raw feedback into
-// distinct pain points, reusing a curated pain point's rich content when the
-// theme genuinely matches one. The model only decides the GROUPING (which
-// feedback belongs together + an optional curated mapping + emergent title/
-// summary/root cause); the impact score, severity, departments and related-
-// feedback list are still computed deterministically by the shared builders, so
-// the output is byte-compatible with the heuristic clusterFeedback().
+// model call (via the isolated Copilot CLI — Copilot Pro, no GitHub token needed,
+// the SAME token-free path the wireframes and solution artifacts use): it groups a
+// website's raw feedback into distinct pain points, reusing a curated pain point's
+// rich content when the theme genuinely matches one. The model only decides the
+// GROUPING (which feedback belongs together + an optional curated mapping +
+// emergent title/summary/root cause); the impact score, severity, departments and
+// related-feedback list are still computed deterministically by the shared
+// builders, so the output is byte-compatible with the heuristic clusterFeedback().
 //
 // Results are cached in SQLite keyed by website + a hash of the feedback set, so
-// the model runs only when the feedback actually changes. Any failure (no token,
-// timeout, bad JSON) is surfaced to the caller, which falls back to the
-// deterministic clusterFeedback().
+// the model runs only when the feedback actually changes. Any failure (CLI
+// unavailable, timeout, bad JSON) is surfaced to the caller, which falls back to
+// the deterministic clusterFeedback().
 
 import { createHash } from 'node:crypto';
-import { chatJSON } from './github-models.js';
+import { runCopilotJSON } from './wireframe-service.js';
 import { curatedPainPoint, emergentPainPoint, clusterFeedback } from '../src/data/clustering.js';
 
 export function ensureCoalesceTable(db) {
@@ -139,12 +140,13 @@ function buildPainPoints(clusters, { feedback, websiteId, curatedById, curatedFo
 // Coalesce a website's feedback into pain points with real AI, cached per
 // feedback set.
 //
-// `allowFallback` controls what happens when the model can't run (no token,
-// timeout, bad JSON). When true (default) we silently return the deterministic
-// clusterFeedback() — handy for offline/no-token scripts. When false we THROW,
-// so the API layer can surface a clean "analyzing/unavailable" state instead of
-// ever showing the keyword heuristic to users (which produced confusing,
-// unrelated pain points like "in-meeting controls" for a logo complaint).
+// `allowFallback` controls what happens when the model can't run (CLI
+// unavailable, timeout, bad JSON). When true (default) we silently return the
+// deterministic clusterFeedback() — handy for offline scripts. When false we
+// THROW, so the API layer can surface a clean "analyzing/unavailable" state
+// instead of ever showing the keyword heuristic to users (which produced
+// confusing, unrelated pain points like "in-meeting controls" for a logo
+// complaint).
 export async function coalesceFeedback(
   db,
   { feedback, websiteId, curatedPainPoints = [], allowFallback = true }
@@ -169,15 +171,12 @@ export async function coalesceFeedback(
 
   let painPoints;
   try {
-    const out = await chatJSON({
-      system:
-        'You are a precise product-feedback analyst. You always return strict JSON ' +
-        'matching the requested schema and never add commentary.',
-      user: buildPrompt(feedback, curatedForSite),
-      temperature: 0.2,
-      maxTokens: 1500,
-      timeoutMs: 30000,
-    });
+    // Cluster through the isolated Copilot CLI (no GitHub token required).
+    const out = await runCopilotJSON(
+      'You are a precise product-feedback analyst. You always return strict JSON ' +
+        'matching the requested schema and never add commentary.\n\n' +
+        buildPrompt(feedback, curatedForSite)
+    );
     painPoints = buildPainPoints(out?.clusters, {
       feedback,
       websiteId,
@@ -185,7 +184,7 @@ export async function coalesceFeedback(
       curatedForSiteIds,
     });
   } catch (err) {
-    // No token / timeout / bad JSON.
+    // CLI unavailable / timeout / bad JSON.
     if (!allowFallback) throw err;
     // Deterministic fallback (not cached, so a later request can still upgrade).
     return clusterFeedback(feedback, websiteId, curatedPainPoints);

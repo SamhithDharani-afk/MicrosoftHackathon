@@ -1,9 +1,11 @@
 // Shared client for the GitHub Models inference API (OpenAI-compatible).
 //
-// Used by the low-latency interactive paths that must NOT pay the Copilot CLI
+// Used by the low-latency interactive path that must NOT pay the Copilot CLI
 // cold-start cost:
 //   - assist-service.js   (live feedback coaching as the user types)
-//   - coalesce-service.js (semantic pain-point clustering)
+//
+// (Pain-point clustering and the solution artifacts now run through the
+// token-free Copilot CLI instead — see coalesce-service.js / solution-service.js.)
 //
 // The GitHub token is read from the server environment only, so it is never
 // exposed to the browser. Calls return strict JSON (response_format json_object).
