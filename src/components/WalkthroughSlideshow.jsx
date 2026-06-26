@@ -160,7 +160,7 @@ export default function WalkthroughSlideshow({ websiteId, painPointSummary, fixT
           <>
             <button
               type="button"
-              onClick={() => { setPlaying(false); go(-1); }}
+              onClick={() => { setPlaying(false); go(1); }}
               aria-label="Previous slide"
               className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/55 hover:bg-black/80 text-white flex items-center justify-center transition-colors"
             >
@@ -168,7 +168,7 @@ export default function WalkthroughSlideshow({ websiteId, painPointSummary, fixT
             </button>
             <button
               type="button"
-              onClick={() => { setPlaying(false); go(1); }}
+              onClick={() => { setPlaying(false); go(-1); }}
               aria-label="Next slide"
               className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/55 hover:bg-black/80 text-white flex items-center justify-center transition-colors"
             >
