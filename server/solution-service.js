@@ -257,6 +257,13 @@ export async function generateDevPrompt(db, { painPoint, websiteName, url, refin
     if (cached) return cached;
   }
 
+  // Always have a complete, ready-to-paste prompt built locally — no token,
+  // API, or network required. This is what the user copies into the AI of
+  // their choice to build the solution shown in the wireframe.
+  const local = buildLocalDevPrompt(painPoint, websiteName, url, refinement);
+
+  // Opportunistically enrich via Copilot when available, but never let its
+  // absence or failure block the feature.
   let out = null;
   try {
     out = await runCopilotJSON(
@@ -266,14 +273,67 @@ export async function generateDevPrompt(db, { painPoint, websiteName, url, refin
   } catch {
     out = null;
   }
-  const fallback =
-    `Implement a fix for the following product issue.\n\n` +
-    `Issue: ${painPoint.title || ''}\n` +
-    `Details: ${painPoint.summary || ''}\n` +
-    `Root cause: ${painPoint.rootCause || ''}\n\n` +
-    `Find the relevant component(s), make the change following the existing design ` +
-    `system, ensure it is accessible and responsive, and add/update tests.`;
-  const result = { prompt: str(out?.prompt, fallback) };
-  if (out) putCache(db, painPoint.id, 'dev-prompt', hash, result);
+  const result = { prompt: str(out?.prompt, local) };
+  putCache(db, painPoint.id, 'dev-prompt', hash, result);
   return result;
+}
+
+// Build a complete, high-quality implementation prompt entirely offline from the
+// pain point + its proposed solution(s). The output is addressed TO an AI coding
+// assistant so the user can copy-paste it into Copilot, Claude, Cursor, ChatGPT,
+// etc. to build the solution version they just previewed in the wireframe.
+function buildLocalDevPrompt(pp, websiteName, url, refinement) {
+  const product = websiteName || 'the product';
+  const solutions = Array.isArray(pp?.solutions) ? pp.solutions : [];
+  const wireframe =
+    solutions.find((s) => s?.type === 'wireframe') || solutions[0] || null;
+  const flow = solutions.find((s) => s?.type === 'process-flow') || null;
+
+  const lines = [
+    `You are an expert front-end engineer. Implement the UI/UX improvement described ` +
+      `below for ${product}${url ? ` (${url})` : ''}, in whatever codebase I share with you.`,
+    '',
+    'CONTEXT',
+    `- Product / page: ${product}${url ? ` (${url})` : ''}`,
+    `- User pain point: ${pp?.title || 'N/A'}`,
+    `- What users experience: ${pp?.summary || 'N/A'}`,
+  ];
+  if (pp?.rootCause) lines.push(`- Root cause: ${pp.rootCause}`);
+  if (pp?.severity) lines.push(`- Severity: ${pp.severity}`);
+
+  lines.push('', 'PROPOSED SOLUTION (from the wireframe preview)');
+  if (wireframe) {
+    lines.push(`- ${wireframe.title || 'Proposed change'}: ${wireframe.description || ''}`);
+  } else {
+    lines.push('- Resolve the pain point above with the smallest, clearest UI change.');
+  }
+  if (flow) {
+    lines.push(`- Improved flow: ${flow.title || ''} — ${flow.description || ''}`);
+  }
+
+  lines.push(
+    '',
+    'TASK',
+    'Recreate the "after" (solution) version shown in the wireframe. Add or modify the ' +
+      'relevant UI element(s) exactly as described so the pain point is resolved, matching ' +
+      'the placement and intent of the proposed design.',
+    '',
+    'REQUIREMENTS',
+    '- Keep the existing design language, spacing, color palette, and components consistent.',
+    '- Make the new/changed element clearly discoverable and accessible: keyboard operable,',
+    '  screen-reader labels, sufficient color contrast, and visible focus states.',
+    '- Do not regress existing functionality or layout; keep changes surgical.',
+    '- Follow the repository conventions and reuse existing components/utilities where possible.',
+    '',
+    'DELIVERABLES',
+    '- The concrete code changes (with file paths) needed to implement this.',
+    '- A short explanation of where each change goes and why.',
+    '- Any new props, routes, state, assets, or tests you introduce.',
+  );
+  if (refinement) {
+    lines.push('', 'ADDITIONAL DIRECTION', `- ${refinement}`);
+  }
+  lines.push('', 'Produce production-ready code I can copy directly into the project.');
+
+  return lines.join('\n');
 }
